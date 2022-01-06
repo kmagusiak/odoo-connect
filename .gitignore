@@ -1,0 +1,14 @@
+# Python files
+*.py[cod]
+__pycache__
+
+# Local env
+.env
+.venv
+
+# Other tools
+dist
+.ipynb_checkpoints
+*.egg-info
+.mypy_cache
+.pytest_cache
