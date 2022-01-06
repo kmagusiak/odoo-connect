@@ -1,6 +1,10 @@
+# Build tools
 setuptools
 setuptools_scm
 black
 flake8
 isort
 pytest
+
+# Dependencies
+requests

@@ -26,7 +26,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "Framework :: Odoo",
     ],
-    python_requires=">=3.5",
+    python_requires=">=3.6",
     setup_requires=[
         'setuptools_scm',
     ],
