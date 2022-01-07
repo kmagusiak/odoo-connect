@@ -1,18 +1,19 @@
+import functools
 import random
 
 import requests
-from requests.compat import urljoin
 
-from . import odoo_rpc_base
+from .odoo_rpc_base import OdooClientBase, urljoin
 
 __doc__ = """
 Uses requests and json to call Odoo
 """
 
 
-class OdooClientJSON(odoo_rpc_base.OdooClientBase):
+class OdooClientJSON(OdooClientBase):
     """Odoo Connection using JSONRPC"""
 
+    @functools.wraps(OdooClientBase.__init__)
     def __init__(self, **kwargs):
         url = kwargs['url']
         self._json_url = urljoin(url, "jsonrpc")

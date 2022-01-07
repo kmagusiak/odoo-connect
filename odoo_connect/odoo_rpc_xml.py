@@ -1,28 +1,22 @@
+import functools
 import xmlrpc.client
 
-from . import odoo_rpc_base
+from .odoo_rpc_base import OdooClientBase, urljoin
 
 __doc__ = """
 Uses xmlrpc for the client.
 """
 
 
-def _urljoin(base, *parts):
-    if not parts:
-        return base
-    if base.endswith("/"):
-        base = base[:-1]
-    return "/".join([base] + [p.strip("/") for p in parts])
-
-
-class OdooClientXML(odoo_rpc_base.OdooClientBase):
+class OdooClientXML(OdooClientBase):
     """Odoo Connection using XMLRPC"""
 
+    @functools.wraps(OdooClientBase.__init__)
     def __init__(self, **kwargs):
         base_url = kwargs['url']
         self.client = {
-            name: xmlrpc.client.ServerProxy(_urljoin(base_url, "xmlrpc/2", name))
-            for name in ('common', 'object')
+            name: xmlrpc.client.ServerProxy(urljoin(base_url, "xmlrpc/2", name))
+            for name in ('common', 'db', 'object')
         }
         super().__init__(**kwargs)
 
