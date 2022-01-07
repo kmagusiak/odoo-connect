@@ -9,6 +9,13 @@ A simple library to use Odoo RPC.
 	so = odoo.env['sale.order']
 	so.search_read([('create_uid', '=', 1)], [])
 
+## Roadmap
+- Make it build and simple requets such as read_group, search_read
+- Check if helper methods are needed
+- Check database version
+- Simple test on runbot or odoo.com (version)
+- Download reports and exports
+
 ## Rationale
 
 [OdooRPC](https://pypi.org/project/OdooRPC/)

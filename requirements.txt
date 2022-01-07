@@ -4,6 +4,9 @@ setuptools_scm
 black
 flake8
 isort
+
+# Testing
+ipython
 pytest
 
 # Dependencies
