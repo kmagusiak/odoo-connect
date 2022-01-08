@@ -8,6 +8,7 @@ isort
 # Testing
 ipython
 pytest
+pytest-httpserver
 
 # Dependencies
 requests
