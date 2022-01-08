@@ -18,6 +18,9 @@ case "${1:-run}" in
 		exit 1;;
 esac
 
+# Check directory
+[ -d .git ] || cd ../..
+
 # Run checks
 flake8
 black --check .

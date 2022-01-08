@@ -33,14 +33,11 @@ class OdooClientJSON(OdooClientBase):
             "id": random.randint(0, 1000000000),
         }
         url = self._json_url
-        req = self.session.post(url, json=data)
-        try:
-            reply = req.json()
-        except Exception:
-            raise Exception(req.content)
+        resp = self.session.post(url, json=data)
+        reply = resp.json()
         if reply.get("error"):
-            raise Exception(reply["error"])
-        return reply.get("result", None)
+            raise RuntimeError(reply["error"])
+        return reply["result"]
 
     def _call(self, service, method, *args):
         return self._json_rpc("call", {"service": service, "method": method, "args": args})

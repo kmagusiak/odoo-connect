@@ -54,7 +54,7 @@ class OdooClientBase(ABC):
             user_agent_env,
         )
         if not self._uid:
-            raise Exception('Failed to authenticate user %s' % username)
+            raise RuntimeError('Failed to authenticate user %s' % username)
 
     @abstractmethod
     def _call(self, service: str, method: str, *args):
@@ -149,7 +149,7 @@ class OdooClientBase(ABC):
         """Get user information"""
         if not self.is_connected:
             return {}
-        return self.get_model('res.users').read(
+        ret = self.get_model('res.users').read(
             self._uid,
             [
                 'login',
@@ -159,6 +159,7 @@ class OdooClientBase(ABC):
                 'login_date',
             ],
         )
+        return next(iter(ret), None)
 
     @property
     def database(self) -> str:

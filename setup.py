@@ -15,7 +15,7 @@ setuptools.setup(
     description="""Simple RPC client for Odoo""",
     keywords="odoo rpc",
     url="https://github.com/kmagusiak/kmagusiak-pip",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(exclude=['tests']),
     long_description=README.read_text(),
     long_description_content_type='text/markdown',
     # https://pypi.org/pypi?%3Aaction=list_classifiers

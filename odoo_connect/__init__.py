@@ -12,7 +12,7 @@ def connect(
     infer_parameters=True,
 ):
     if not url:
-        raise Exception('url must not be empty')
+        raise ValueError('url must not be empty')
     if infer_parameters:
         if not url.startswith('http'):
             # assume url contains just the host name
