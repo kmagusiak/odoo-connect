@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import List
+from typing import Dict, List, Set, Union
 
 __doc__ = """
 Base class for Odoo RPC.
@@ -20,6 +20,9 @@ def urljoin(base, *parts):
 class OdooClientBase(ABC):
     """Odoo server connection"""
 
+    url: str
+    _models: Dict[str, "OdooModel"]
+
     def __init__(self, *, url, database, username=None, password=None, **_kwargs):
         """Create new connection and authenicate when username is given."""
         log = logging.getLogger(__name__)
@@ -36,6 +39,7 @@ class OdooClientBase(ABC):
             log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
         else:
             self.authenticate(None, None)
+        self._models = {}
 
     def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
@@ -59,7 +63,7 @@ class OdooClientBase(ABC):
     @abstractmethod
     def _call(self, service: str, method: str, *args):
         """Execute a method on a service"""
-        pass
+        raise NotImplementedError
 
     def _execute_kw(self, model: str, method: str, *args, **kw):
         """Execute a method on a model"""
@@ -75,19 +79,22 @@ class OdooClientBase(ABC):
             kw,
         )
 
-    def get_model(self, model: str, check: bool = False) -> "OdooModel":
+    def get_model(self, model_name: str, check: bool = False) -> "OdooModel":
         """Get a model instance
 
         :param model: Name of the model
         :param check: Check if the model exists (default: no), if doesn't exist, return None
         :return: Proxy for the model functions
         """
-        model = OdooModel(self, model)
+        model = self._models.get(model_name)
+        if model is None:
+            model = OdooModel(self, model_name)
+            self._models[model_name] = model
         if check:
             try:
                 # call any method to check if the call works
                 model.default_get(['id'])
-            except:  # noqa: E722  pylint: disable=W0702
+            except:  # noqa: E722
                 # Return none if didn't verify
                 return None
         return model
@@ -101,7 +108,7 @@ class OdooClientBase(ABC):
         models = self.get_model('ir.model').search_read([], ['model'])
         return [m['model'] for m in models]
 
-    def ref(self, xml_id: str, raise_if_not_found: bool = True) -> dict:
+    def ref(self, xml_id: str, fields: List[str] = [], raise_if_not_found: bool = True) -> dict:
         """Read the record corresponding to the given `xml_id`."""
         if '.' not in xml_id:
             raise ValueError('xml_id not valid')
@@ -113,7 +120,7 @@ class OdooClientBase(ABC):
         if rec:
             rec = rec[0]
             model = self.get_model(rec.get('model'))
-            to_return = model.search_read([('id', '=', rec.get('res_id'))], [])
+            to_return = model.read(rec.get('res_id'), fields)
             if to_return:
                 return to_return[0]
         if raise_if_not_found:
@@ -149,7 +156,7 @@ class OdooClientBase(ABC):
         """Get user information"""
         if not self.is_connected:
             return {}
-        ret = self.get_model('res.users').read(
+        data = self.get_model('res.users').read(
             self._uid,
             [
                 'login',
@@ -159,7 +166,7 @@ class OdooClientBase(ABC):
                 'login_date',
             ],
         )
-        return next(iter(ret), None)
+        return data[0] if data else None
 
     @property
     def database(self) -> str:
@@ -170,7 +177,7 @@ class OdooClientBase(ABC):
         """Alias for get_model"""
         return self.get_model(model)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         user = str(self._uid or self._username)
         return f"OdooClient({self.url},{self.protocol},db:{self.database},user:{user})"
 
@@ -186,8 +193,9 @@ class OdooModel:
         """
         self.odoo = odoo
         self.model = model
+        self._field_info = None
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         """By default, return function bound to execute(name, ...)"""
 
         def odoo_wrapper(*args, **kw):
@@ -195,7 +203,7 @@ class OdooModel:
 
         return odoo_wrapper
 
-    def execute(self, method, *args, **kw):
+    def execute(self, method: str, *args, **kw):
         """Execute an rpc method with arguments"""
         logging.getLogger(__name__).debug("Execute %s on %s", method, self.model)
         return self.odoo._execute_kw(
@@ -205,16 +213,18 @@ class OdooModel:
             **kw,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self.odoo) + "/" + self.model
 
-    def fields(self, fields=None) -> List[dict]:
+    def fields(self) -> Dict[str, dict]:
         """Returns the fields of the model"""
-        return self.execute(
-            'fields_get',
-            allfields=fields or [],
-            attributes=['string', 'type', 'readonly', 'store', 'relation'],
-        )
+        if not self._field_info:
+            self._field_info = self.execute(
+                'fields_get',
+                allfields=[],
+                attributes=['string', 'type', 'readonly', 'store', 'relation'],
+            )
+        return self._field_info
 
     def load(self, fields, data):
         """Load the data into the model"""
@@ -223,7 +233,7 @@ class OdooModel:
 
     def export(self, fields, domain=None, format=None, token=None, **kwargs):
         pass  # TODO use /web/export/csv
-        return self.search_read_deep(domain, fields, **kwargs)
+        return self.search_read_dict(domain, fields, **kwargs)
 
     def get_report(self):
         pass  # TODO use /report/<converter>/<reportname>/<docids>
@@ -232,83 +242,99 @@ class OdooModel:
         pass  # TODO use /web/content/<string:model>/<int:id>/<string:field>
         pass  # TODO? use /web/image/<string:model>/<int:id>/<string:field>/<int:width>x<int:height>
 
-    def search_read_deep(self, domain, fields, **kwargs):  # TODO need?
-        """Search read with chained fields
+    def search_read_dict(
+        self, domain: List, fields: Union[List[str], Set[str], Dict[str, Set[str]]], **kwargs
+    ):
+        """Search read with a dictionnary output and hierarchy view
 
-        Example: model.search_read_deep([], ['partner_id.name', 'name'])
+        Example: model.search_read_dict([], ['partner_id.name', 'name'])
 
         :param domain: The domain for the search
-        :param fields: A list of fields (may contain chains) or a dict containing (field: [fields])
+        :param fields: A list of fields (may contain chains f1.f2)
+                       or a dict containing (field: [fields])
         :return: A list of found objects
         """
 
-        def prepare_field_arguments(fields):
-            if isinstance(fields, list):
-                new_fields = defaultdict(list)
-                for field in fields:
-                    f_split = field.split('.', 1)
-                    child = new_fields[f_split[0]]
-                    if len(f_split) > 1:
-                        child.append(f_split[1])
-                fields = new_fields
-            fields_data = self.fields(list(fields))
-            deep_fields = {f: fields[f] for f, p in fields_data.items() if p.get('relation')}
-            return fields_data, deep_fields
+        def parse_fields(fields) -> Dict[str, Set[str]]:
+            """Convert to dict field_name -> related names"""
+            new_fields = defaultdict(set)
+            for field in fields:
+                f_split = field.split('.', 1)
+                child = new_fields[f_split[0]]
+                if len(f_split) > 1:
+                    child.add(f_split[1])
+            return new_fields
 
-        def get_related_ids(data):
+        if isinstance(fields, list | set):
+            fields = parse_fields(fields)
+        data = self.search_read(domain, list(fields), **kwargs)
+
+        def get_related_ids() -> Dict[str, Set[int]]:
+            """For each field, check its type and convert relations to ids,
+            return a dict model -> set of ids
+            """
             related = defaultdict(set)
-            for datum in data:
-                for field, value in datum.items():
+            for field in fields:
+                model_name = self.fields().get(field, {}).get('relation')
+                if not model_name:
+                    continue
+                for datum in data:
+                    value = datum.get(field)
                     if not isinstance(value, list):
                         continue
-                    model_name = fields_data[field].get('relation')
+                    # update related with ids
                     if len(value) == 2 and not isinstance(value[1], int):
                         # x2one
-                        related[model_name].add(value[0])
                         datum[field] = value[0]
-                    else:
-                        # x2many
-                        related[model_name].update(value)
+                        value = [value[0]]
+                    related[model_name].update(value)
             return related
 
-        def replace_related_data(related, deep_fields, data):
-            related_data = {}
-            for model_name, ids in related.items():
-                rel_fields = set()
-                for field, deep in deep_fields.items():
-                    if fields_data[field].get('relation') != model_name:
-                        continue
-                    rel_fields.update(deep)
-                if not rel_fields:
-                    continue
-                rel_fields = list(rel_fields)
-                rel = self.odoo[model_name].search_read_deep([('id', 'in', list(ids))], rel_fields)
-                rel = {e['id']: e for e in rel}
-                related_data[model_name] = rel
-            # replace
-            for datum in data:
-                for field, value in datum.items():
-                    deep_field = deep_fields.get(field)
-                    if not deep_field or not value:
-                        continue
-                    related_model = related_data.get(fields_data[field]['relation'], {})
-
-                    def resolve(i):
-                        return {
-                            k: v
-                            for k, v in (related_model.get(i) or {'id': i}).items()
-                            if k == 'id' or k in deep_field
-                        }
-
-                    if isinstance(value, list):
-                        datum[field] = [resolve(e) for e in value]
-                    elif isinstance(value, int):
-                        datum[field] = resolve(value)
-
-        fields_data, deep_fields = prepare_field_arguments(fields)
-        data = self.search_read(domain, list(fields_data), **kwargs)
-        related = get_related_ids(data)
+        related = get_related_ids()
         if not related:  # nothing to fetch, stop here
             return data
-        replace_related_data(related, deep_fields, data)
+
+        # recursive search for each model
+        related_data: Dict[str, Dict[int, Dict]] = {}
+        for model_name, ids in related.items():
+            rel_fields = set(
+                d
+                for field, deep_fields in fields.items()
+                if self.fields().get(field, {}).get('relation') == model_name
+                for d in deep_fields
+            )
+            if not rel_fields:
+                continue
+            model = self.odoo[model_name]
+            # build domain and add active field if it's in the model
+            # TODO replace with a read call
+            domain = [('id', 'in', list(ids))]
+            if 'active' in model.fields():
+                domain += [('active', 'in', [True, False])]
+            related_data[model_name] = {
+                e['id']: e for e in model.search_read_dict(domain, rel_fields)
+            }
+
+        # replace in data
+        for field, deep_field in fields.items():
+            if not deep_field:
+                continue
+            deep_field = set(f.split('.', 1)[0] for f in deep_field)
+            model_name = self.fields().get(field, {}).get('relation')
+            related_model = related_data.get(model_name)
+
+            def resolve(i: int):
+                return {
+                    k: v
+                    for k, v in (related_model.get(i) or {'id': i}).items()
+                    if k == 'id' or k in deep_field
+                }
+
+            for datum in data:
+                value = datum[field]
+                if isinstance(value, list):
+                    datum[field] = [resolve(e) for e in value]
+                elif value:
+                    datum[field] = resolve(value)
+
         return data

@@ -57,3 +57,37 @@ def test_version(connect_params):
     version = env.version()
     print(version)
     assert isinstance(version, dict)
+
+
+def test_list_models(odoo_session):
+    models = odoo_session.list_models()
+    assert isinstance(models, list) and 'res.users' in models
+
+
+def test_model_search_user(odoo_session):
+    data = odoo_session['res.users'].search_read(
+        [('active', 'in', [True, False])], ['login'], limit=2
+    )
+    print(data)
+    assert len(data) == 2, "There should always be at least 2 users"
+    assert data[0]['login'], "Every user must have a login"
+
+
+def test_ref(odoo_session):
+    data = odoo_session.ref('base.group_user', fields=['name'])
+    print(data)
+    assert isinstance(data, dict)
+
+
+def test_read_dict(odoo_session):
+    data = odoo_session['res.users'].search_read_dict(
+        [('id', '=', 1), ('active', 'in', [True, False])],
+        ['login', 'partner_id.name', 'partner_id.commercial_partner_id.name'],
+    )
+    print(data)
+    user = data[0]
+    assert user['id'] == 1
+    assert 'login' in user
+    partner = user['partner_id']
+    assert 'id' in partner
+    assert isinstance(partner.get('commercial_partner_id'), dict)

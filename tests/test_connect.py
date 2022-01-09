@@ -37,3 +37,20 @@ def test_version(connect_params):
     version = env.version()
     print(version)
     assert isinstance(version, dict)
+
+
+def test_list_databases(odoo_cli, odoo_json_rpc_handler):
+    @odoo_json_rpc_handler.patch_generic
+    def list_db(service, method, args):
+        if service == 'db' and method == 'list':
+            return ['odoo']
+
+    databases = odoo_cli.list_databases()
+    assert databases == ['odoo']
+
+
+def test_model_read(odoo_cli):
+    users = odoo_cli.get_model('res.users')
+    assert users and isinstance(odoo_cli['res.users'], type(users))
+    data = users.read(1)
+    assert isinstance(data, list) and len(data)
