@@ -1,6 +1,5 @@
 import logging
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from typing import Dict, List, Set, Union
 
 __doc__ = """
@@ -242,8 +241,55 @@ class OdooModel:
         pass  # TODO use /web/content/<string:model>/<int:id>/<string:field>
         pass  # TODO? use /web/image/<string:model>/<int:id>/<string:field>/<int:width>x<int:height>
 
+    def __read_dict_recursive(self, data, fields):
+        for field_name, child_fields in fields.items():
+            field_info = self.fields().get(field_name, {})
+            model_name = field_info.get('relation')
+            if not model_name:
+                # not a reference field, skip it
+                continue
+
+            # simplify contents and get ids
+            many = field_info.get('type') != 'many2one'
+            ids = set()
+            if many:
+                for datum in data:
+                    value = datum.get(field_name)
+                    if isinstance(value, list):
+                        ids.update(value)
+                    else:
+                        datum[field_name] = []
+            else:
+                for datum in data:
+                    value = datum.get(field_name)
+                    if isinstance(value, list):
+                        assert len(value) == 2 and not isinstance(value[1], int)
+                        datum[field_name] = value[0]
+                        ids.add(value[0])
+            if not ids or not (set(child_fields) - {'id'}):
+                continue
+
+            # read the data from children
+            model = self.odoo.get_model(model_name)
+            children_data = model.read(list(ids), list(child_fields))
+            model.__read_dict_recursive(children_data, child_fields)
+            children_data = {e['id']: e for e in children_data}
+
+            # replace the data
+            if many:
+                for datum in data:
+                    datum[field_name] = [
+                        children_data.get(v) or {"id": v} for v in datum.get(field_name) or []
+                    ]
+            else:
+                for datum in data:
+                    v = datum.get(field_name)
+                    datum[field_name] = (children_data.get(v) or {"id": v}) if v else {}
+
+        return data
+
     def search_read_dict(
-        self, domain: List, fields: Union[List[str], Set[str], Dict[str, Set[str]]], **kwargs
+        self, domain: List, fields: Union[List[str], Dict[str, Set[str]]], **kwargs
     ):
         """Search read with a dictionnary output and hierarchy view
 
@@ -251,90 +297,26 @@ class OdooModel:
 
         :param domain: The domain for the search
         :param fields: A list of fields (may contain chains f1.f2)
-                       or a dict containing (field: [fields])
+                       or a dict containing fields to read {field: {child_fields...}}
+        :param kwargs: Other arguments passed to search_read (limit, offet, orderby, etc.)
         :return: A list of found objects
         """
 
-        def parse_fields(fields) -> Dict[str, Set[str]]:
-            """Convert to dict field_name -> related names"""
-            new_fields = defaultdict(set)
+        # Make sure fields is a dict representing the data to get
+        if isinstance(fields, list):
+            new_fields = {}
             for field in fields:
-                f_split = field.split('.', 1)
-                child = new_fields[f_split[0]]
-                if len(f_split) > 1:
-                    child.add(f_split[1])
-            return new_fields
+                level = new_fields
+                for f in field.split('.'):
+                    if f not in level:
+                        level[f] = {}
+                    level = level[f]
+            fields = new_fields
+        elif isinstance(fields, dict):
+            pass  # XXX check?
+        else:
+            raise ValueError('Invalid fields parameter: %s' % fields)
 
-        if isinstance(fields, list | set):
-            fields = parse_fields(fields)
+        # Search an use read recursively
         data = self.search_read(domain, list(fields), **kwargs)
-
-        def get_related_ids() -> Dict[str, Set[int]]:
-            """For each field, check its type and convert relations to ids,
-            return a dict model -> set of ids
-            """
-            related = defaultdict(set)
-            for field in fields:
-                model_name = self.fields().get(field, {}).get('relation')
-                if not model_name:
-                    continue
-                for datum in data:
-                    value = datum.get(field)
-                    if not isinstance(value, list):
-                        continue
-                    # update related with ids
-                    if len(value) == 2 and not isinstance(value[1], int):
-                        # x2one
-                        datum[field] = value[0]
-                        value = [value[0]]
-                    related[model_name].update(value)
-            return related
-
-        related = get_related_ids()
-        if not related:  # nothing to fetch, stop here
-            return data
-
-        # recursive search for each model
-        related_data: Dict[str, Dict[int, Dict]] = {}
-        for model_name, ids in related.items():
-            rel_fields = set(
-                d
-                for field, deep_fields in fields.items()
-                if self.fields().get(field, {}).get('relation') == model_name
-                for d in deep_fields
-            )
-            if not rel_fields:
-                continue
-            model = self.odoo[model_name]
-            # build domain and add active field if it's in the model
-            # TODO replace with a read call
-            domain = [('id', 'in', list(ids))]
-            if 'active' in model.fields():
-                domain += [('active', 'in', [True, False])]
-            related_data[model_name] = {
-                e['id']: e for e in model.search_read_dict(domain, rel_fields)
-            }
-
-        # replace in data
-        for field, deep_field in fields.items():
-            if not deep_field:
-                continue
-            deep_field = set(f.split('.', 1)[0] for f in deep_field)
-            model_name = self.fields().get(field, {}).get('relation')
-            related_model = related_data.get(model_name)
-
-            def resolve(i: int):
-                return {
-                    k: v
-                    for k, v in (related_model.get(i) or {'id': i}).items()
-                    if k == 'id' or k in deep_field
-                }
-
-            for datum in data:
-                value = datum[field]
-                if isinstance(value, list):
-                    datum[field] = [resolve(e) for e in value]
-                elif value:
-                    datum[field] = resolve(value)
-
-        return data
+        return self.__read_dict_recursive(data, fields)
