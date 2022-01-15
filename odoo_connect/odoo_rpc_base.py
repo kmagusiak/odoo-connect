@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Union
 
 __doc__ = """
 Base class for Odoo RPC.
@@ -221,27 +221,36 @@ class OdooModel:
             self._field_info = self.execute(
                 'fields_get',
                 allfields=[],
-                attributes=['string', 'type', 'readonly', 'store', 'relation'],
+                attributes=['string', 'type', 'readonly', 'required', 'store', 'relation'],
             )
         return self._field_info
 
-    def load(self, fields, data):
-        """Load the data into the model"""
-        # TODO provide example
-        return self.execute("load", fields=fields, data=data)
-
-    def export(self, fields, domain=None, format=None, token=None, **kwargs):
-        pass  # TODO use /web/export/csv
-        return self.search_read_dict(domain, fields, **kwargs)
-
-    def get_report(self):
-        pass  # TODO use /report/<converter>/<reportname>/<docids>
-
-    def get_binary(self, id, field_name):
-        pass  # TODO use /web/content/<string:model>/<int:id>/<string:field>
-        pass  # TODO? use /web/image/<string:model>/<int:id>/<string:field>/<int:width>x<int:height>
+    def __prepare_dict_fields(self, fields: Union[List[str], Dict[str, Dict]]) -> Dict[str, Dict]:
+        """Make sure fields is a dict representing the data to get"""
+        if isinstance(fields, list):
+            new_fields = {}
+            for field in fields:
+                level = new_fields
+                for f in field.split('.'):
+                    if f not in level:
+                        level[f] = {}
+                    level = level[f]
+            return new_fields
+        if isinstance(fields, dict):
+            new_fields = {}
+            for k, v in fields.items():
+                if isinstance(v, set):
+                    v = list(v)
+                if isinstance(v, list):
+                    new_fields[k] = self.__prepare_dict_fields(v)
+            if new_fields:
+                new_fields.update({k: v for k, v in fields.items() if k not in new_fields})
+                return new_fields
+            return fields
+        raise ValueError('Invalid fields parameter: %s' % fields)
 
     def __read_dict_recursive(self, data, fields):
+        """For each field, read recursively the data"""
         for field_name, child_fields in fields.items():
             field_info = self.fields().get(field_name, {})
             model_name = field_info.get('relation')
@@ -288,10 +297,12 @@ class OdooModel:
 
         return data
 
-    def search_read_dict(
-        self, domain: List, fields: Union[List[str], Dict[str, Set[str]]], **kwargs
+    def read_dict(
+        self,
+        ids: Union[List[int], int],
+        fields: Union[List[str], Dict[str, Dict]],
     ):
-        """Search read with a dictionnary output and hierarchy view
+        """Read with a dictionnary output and hierarchy view
 
         Example: model.search_read_dict([], ['partner_id.name', 'name'])
 
@@ -301,22 +312,25 @@ class OdooModel:
         :param kwargs: Other arguments passed to search_read (limit, offet, orderby, etc.)
         :return: A list of found objects
         """
+        single = isinstance(ids, int)
+        if single:
+            ids = [ids]
+        fields = self.__prepare_dict_fields(fields)
+        data = self.read(ids, list(fields))
+        result = self.__read_dict_recursive(data, fields)
+        return result[0] if single else result
 
-        # Make sure fields is a dict representing the data to get
-        if isinstance(fields, list):
-            new_fields = {}
-            for field in fields:
-                level = new_fields
-                for f in field.split('.'):
-                    if f not in level:
-                        level[f] = {}
-                    level = level[f]
-            fields = new_fields
-        elif isinstance(fields, dict):
-            pass  # XXX check?
-        else:
-            raise ValueError('Invalid fields parameter: %s' % fields)
+    def search_read_dict(self, domain: List, fields: Union[List[str], Dict[str, Dict]], **kwargs):
+        """Search read with a dictionnary output and hierarchy view
 
-        # Search an use read recursively
+        Similar to `read_dict`.
+
+        :param domain: The domain for the search
+        :param fields: A list of fields (may contain chains f1.f2)
+                       or a dict containing fields to read {field: {child_fields...}}
+        :param kwargs: Other arguments passed to search_read (limit, offet, orderby, etc.)
+        :return: A list of found objects
+        """
+        fields = self.__prepare_dict_fields(fields)
         data = self.search_read(domain, list(fields), **kwargs)
         return self.__read_dict_recursive(data, fields)
