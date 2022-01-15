@@ -2,6 +2,8 @@
 
 A simple library to use Odoo RPC.
 
+[![PyPI version](https://badge.fury.io/py/odoo-connect.svg)](https://pypi.org/project/odoo-connect/)
+
 ## Usage
 
 	import odoo_connect
@@ -33,3 +35,15 @@ where some other code set product_uom_qty to 0 before you increment it.
 	for line in lines:
 		if line.product_uom_qty > 1:
 			line.product_uom_qty += 1
+
+## Development
+
+You can use a vscode container and open this repository inside it.
+
+	git clone $url
+	cd odoo-connect
+	# Install dev libraries
+	pip install -r requirements.txt
+	./pre-commit install
+	# Run some tests
+	pytest

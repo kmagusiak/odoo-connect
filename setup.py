@@ -1,11 +1,10 @@
-import os
+import pathlib
 
 import setuptools
 
-
-def read(fname):
-    with open(os.path.join(os.path.dirname(__file__), fname)) as f:
-        return f.read()
+# The directory containing this file
+HERE = pathlib.Path(__file__).parent
+README = HERE / "README.md"
 
 
 setuptools.setup(
@@ -16,8 +15,8 @@ setuptools.setup(
     description="""Simple RPC client for Odoo""",
     keywords="odoo rpc",
     url="https://github.com/kmagusiak/kmagusiak-pip",
-    packages=['odoo_connect'],
-    long_description=read('README.md'),
+    packages=setuptools.find_packages(exclude=['tests']),
+    long_description=README.read_text(),
     long_description_content_type='text/markdown',
     # https://pypi.org/pypi?%3Aaction=list_classifiers
     classifiers=[
@@ -26,7 +25,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "Framework :: Odoo",
     ],
-    python_requires=">=3.5",
+    python_requires=">=3.6",
     setup_requires=[
         'setuptools_scm',
     ],

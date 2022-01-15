@@ -18,8 +18,11 @@ case "${1:-run}" in
 		exit 1;;
 esac
 
+# Check directory
+[ -d .git ] || cd ../..
+
 # Run checks
 flake8
-black --check -q .
+black --check .
 isort --check-only .
 echo "All good to commit"

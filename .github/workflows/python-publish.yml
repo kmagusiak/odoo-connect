@@ -11,7 +11,7 @@ name: PyPi Package
 on:
   push:
     branches:
-      - main
+      - master
   release:
     types: [published]
 
