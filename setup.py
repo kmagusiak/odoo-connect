@@ -9,7 +9,7 @@ README = HERE / "README.md"
 
 setuptools.setup(
     name="odoo-connect",
-    version="0.0.1",
+    version="0.1",
     author="Krzysztof Magusiak",
     author_email="chrmag@poczta.onet.pl",
     description="""Simple RPC client for Odoo""",
