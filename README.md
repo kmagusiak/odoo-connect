@@ -39,6 +39,7 @@ where some other code set product_uom_qty to 0 before you increment it.
 ## Development
 
 You can use a vscode container and open this repository inside it.
+Alternatively, clone and setup the repository manually.
 
 	git clone $url
 	cd odoo-connect
