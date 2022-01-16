@@ -46,11 +46,13 @@ with the requested data.
 You can also pass filter names or export names instead of, respectively,
 domains and fields. Note that this doesn't support groupping.
 
+	# Read data as usual
+	env['sale.order'].search_read_dict([('state', '=', 'sale')], ['name', 'partner_id.name'])
+	env['sale.order'].read_group([], ['amount_untaxed'], ['partner_id', 'create_date:month'])
+
+	# Export data
 	import odoo_connect.data as odoo_data
 	odoo_data.export_data(env['sale.order'], [('state', '=', 'sale')], ['name', 'partner_id.name'])
-
-	# TODO export read groups
-	odoo_data.flatten(env['sale.order'].read_group([], ['amount_untaxed'], ['partner_id']))
 
 	# TODO import data
 
