@@ -92,10 +92,10 @@ class OdooClientBase(ABC):
         if check:
             try:
                 # call any method to check if the call works
-                model.default_get(['id'])
+                # let's fetch the fields (which we probably will do anyways)
+                model.fields()
             except:  # noqa: E722
-                # Return none if didn't verify
-                return None
+                raise RuntimeError('Model %s not found' % model)
         return model
 
     def list_databases(self) -> List[str]:
