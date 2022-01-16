@@ -85,3 +85,20 @@ def test_flatten(dict, fields, expected):
 def test_flatten_many(list_dict, fields, expected):
     output = odoo_data.flatten(list_dict, fields)
     assert expected == output
+
+
+def test_flatten_expand_many():
+    expanded = list(
+        odoo_data.flatten(
+            [
+                {
+                    'id': 5,
+                    'numbers': [2, False],
+                    'orders': [{'name': 'ok'}, {'name': 'ko', 'partners': [1, 2]}],
+                }
+            ],
+            ['numbers', 'orders.name', 'orders.partners'],
+            expand_many=True,
+        )
+    )
+    assert len(expanded) == 12

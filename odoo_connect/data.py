@@ -220,6 +220,7 @@ def export_data(
     filter_or_domain: Union[str, List],
     export_or_fields: Union[str, List[str]],
     with_header: bool = True,
+    expand_many: bool = False,
 ) -> List[List]:
     """Export data into a tabular format
 
@@ -228,6 +229,7 @@ def export_data(
     :param export_or_fields: Either a list of fields (like is search_read_dict)
         or an ir.exports name
     :param with_header: Include the header in the result (default: True)
+    :param expand_many: Flatten lists embedded in the result (default: False)
     :return: List of rows with data
     """
     odoo = model.odoo
@@ -267,7 +269,7 @@ def export_data(
 
     records = model.search_read_dict(domain, fields)
 
-    data = flatten(records, fields)
+    data = flatten(records, fields, expand_many=expand_many)
     if with_header:
         data.insert(0, [str(f) for f in fields])
     return data
@@ -323,8 +325,27 @@ def _flatten(value, field_levels: List[str]) -> Any:
     return False  # default
 
 
-def flatten(data: List[Dict], fields: List[str]) -> List[List]:
+def _expand_many(data: List[Dict]) -> List[Dict]:
+    for d in data:
+        should_yield = True
+        for k, v in d.items():
+            if isinstance(v, list) and len(v):
+                should_yield = False
+                for i in v:
+                    yield from _expand_many([{**d, k: i}])
+        for k, v in d.items():
+            if should_yield and isinstance(v, dict):
+                should_yield = False
+                for row in _expand_many([v]):
+                    yield {**d, k: row}
+        if should_yield:
+            yield d
+
+
+def flatten(data: List[Dict], fields: List[str], expand_many=False) -> List[List]:
     """Flatten each dict with values into a single row"""
+    if expand_many:
+        data = list(_expand_many(data))
     field_levels = [f.split('.') for f in fields]
     return [[_flatten(d.get(fl[0]), fl[1:]) for fl in field_levels] for d in data]
 
