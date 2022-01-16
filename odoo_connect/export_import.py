@@ -39,14 +39,14 @@ def get_attachment(model, value_or_id, field_name=None) -> bytes:
         record = model.read(value_or_id, [field_name])
         value = record[0][field_name]
         if field_info.get("relation") == "ir.attachment":
-            if field_info.get("ttype") != "many2one":
+            if field_info.get("type") != "many2one":
                 raise RuntimeError(
                     "Field %s is not a many2one, here are the values: %s" % (field_name, value)
                 )
             value = value[0]
-        elif field_info.get("ttype") != "binary":
+        elif field_info.get("type") != "binary":
             raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
-        return get_attachment(value)
+        return get_attachment(model, value)
     # read the attachment
     return get_attachments(model.odoo, [value_or_id])[0]
 
@@ -67,12 +67,14 @@ def get_reports(model: OdooModel):
 
 
 def get_report(model: OdooModel, reportname: str, id: int, converter='pdf') -> bytes:
-    from .odoo_rpc_base import urljoin
+    from .odoo_rpc_json import OdooClientJSON, urljoin
+
+    if not isinstance(model.odoo, OdooClientJSON):
+        raise RuntimeError('Can get the report only using OdooClientJSON')
 
     url = urljoin(model.odoo.url, f"/report/{converter}/{reportname}/{id}")
-    req = model.odoo.session.get(url)  # XXX session may not exist
-    if not req.ok:
-        raise req
+    req = model.odoo.session.get(url)
+    req.raise_for_status()
     return req.content
 
 
@@ -90,7 +92,7 @@ def export(
     filter_or_domain: Union[str, List],
     export_or_fields: Union[str, List[str]],
     with_header: bool = True,
-    flatten: bool = True,
+    expand_many: bool = True,
 ) -> List[List]:
     odoo = model.odoo
     kwargs = {}
@@ -129,8 +131,16 @@ def export(
 
     records = model.search_read_dict(domain, fields)
 
-    data = [[rec[f] for f in fields] for rec in records]
+    data = flatten(records, fields, expand_many=expand_many)
     if with_header:
         data.insert(0, [str(f) for f in fields])
-    # TODO flatten
+    return data
+
+
+def flatten(data, fields, expand_many=False):
+    if isinstance(data, list):
+        return [flatten(d, fields, expand_many=expand_many) for d in data]
+    if not isinstance(data, dict):
+        return data
+    # TODO
     return data
