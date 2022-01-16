@@ -92,10 +92,10 @@ class OdooClientBase(ABC):
         if check:
             try:
                 # call any method to check if the call works
-                model.default_get(['id'])
+                # let's fetch the fields (which we probably will do anyways)
+                model.fields()
             except:  # noqa: E722
-                # Return none if didn't verify
-                return None
+                raise RuntimeError('Model %s not found' % model)
         return model
 
     def list_databases(self) -> List[str]:
@@ -251,6 +251,8 @@ class OdooModel:
 
     def __read_dict_recursive(self, data, fields):
         """For each field, read recursively the data"""
+        if not fields:
+            fields = {f: {} for f in self.fields()}
         for field_name, child_fields in fields.items():
             field_info = self.fields().get(field_name, {})
             model_name = field_info.get('relation')

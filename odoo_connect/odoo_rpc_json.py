@@ -16,7 +16,7 @@ class OdooClientJSON(OdooClientBase):
     @functools.wraps(OdooClientBase.__init__)
     def __init__(self, **kwargs):
         url = kwargs['url']
-        self._json_url = urljoin(url, "jsonrpc")
+        self.__json_url = urljoin(url, "jsonrpc")
         self.session = requests.Session()
         super().__init__(**kwargs)
 
@@ -32,8 +32,7 @@ class OdooClientJSON(OdooClientBase):
             "params": params,
             "id": random.randint(0, 1000000000),
         }
-        url = self._json_url
-        resp = self.session.post(url, json=data)
+        resp = self.session.post(self.__json_url, json=data)
         reply = resp.json()
         if reply.get("error"):
             raise RuntimeError(reply["error"])
