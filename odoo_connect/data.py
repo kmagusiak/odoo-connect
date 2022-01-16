@@ -176,7 +176,7 @@ def get_formatter(type_name: str) -> Callable:
 
 
 @overload
-def get_formatter(model: OdooModel) -> defaultdict[str, Callable]:
+def get_formatter(model: OdooModel) -> defaultdict:  # [str, Callable]:
     ...
 
 
