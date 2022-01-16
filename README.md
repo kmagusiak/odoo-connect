@@ -7,8 +7,8 @@ A simple library to use Odoo RPC.
 ## Usage
 
 	import odoo_connect
-	odoo = odoo_connect.connect(url='http://localhost', username='admin', password='admin')
-	so = odoo.env['sale.order']
+	odoo = env = odoo_connect.connect(url='http://localhost', username='admin', password='admin')
+	so = env['sale.order']
 	so.search_read([('create_uid', '=', 1)], [])
 
 ## Rationale
@@ -35,6 +35,24 @@ where some other code set product_uom_qty to 0 before you increment it.
 	for line in lines:
 		if line.product_uom_qty > 1:
 			line.product_uom_qty += 1
+
+## Export and import data
+
+A separate package provides utilities to more easily extract data from Odoo.
+It also contains utility to get binary data (attachments) and reports.
+
+The following function will return a table-like (list of lists) structure
+with the requested data.
+You can also pass filter names or export names instead of, respectively,
+domains and fields. Note that this doesn't support groupping.
+
+	import odoo_connect.data as odoo_data
+	odoo_data.export_data(env['sale.order'], [('state', '=', 'sale')], ['name', 'partner_id.name'])
+
+	# TODO export read groups
+	odoo_data.flatten(env['sale.order'].read_group([], ['amount_untaxed'], ['partner_id']))
+
+	# TODO import data
 
 ## Development
 
