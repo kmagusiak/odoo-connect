@@ -251,6 +251,8 @@ class OdooModel:
 
     def __read_dict_recursive(self, data, fields):
         """For each field, read recursively the data"""
+        if not fields:
+            fields = {f: {} for f in self.fields()}
         for field_name, child_fields in fields.items():
             field_info = self.fields().get(field_name, {})
             model_name = field_info.get('relation')

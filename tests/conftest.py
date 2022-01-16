@@ -1,3 +1,5 @@
+import pathlib
+
 import pytest
 
 from . import mock_odoo_server
@@ -34,3 +36,16 @@ def odoo_cli(connect_params):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "runbot: integration tests on runbot")
+
+
+def pytest_collection_modifyitems(config, items):
+    # If a test is in a subdirectory, add marker which is the directory name
+    # https://stackoverflow.com/questions/57031403/pytest-marks-mark-entire-directory-package
+    # To mark a file, you can use pytestmark = pytest.mark.my_mark
+    rootdir = pathlib.Path(config.rootdir)
+    for item in items:
+        rel_path = pathlib.Path(item.fspath).relative_to(rootdir)
+        mark_name = next((part for part in rel_path.parts if not part.startswith('test')), '')
+        if mark_name:
+            mark = getattr(pytest.mark, mark_name)
+            item.add_marker(mark)
