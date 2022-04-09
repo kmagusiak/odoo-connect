@@ -3,7 +3,7 @@ import random
 
 import requests
 
-from .odoo_rpc_base import OdooClientBase, urljoin
+from .odoo_rpc_base import OdooClientBase, OdooServerError, urljoin
 
 __doc__ = """
 Uses requests and json to call Odoo
@@ -16,7 +16,7 @@ class OdooClientJSON(OdooClientBase):
     @functools.wraps(OdooClientBase.__init__)
     def __init__(self, **kwargs):
         url = kwargs['url']
-        self._json_url = urljoin(url, "jsonrpc")
+        self.__json_url = urljoin(url, "jsonrpc")
         self.session = requests.Session()
         super().__init__(**kwargs)
 
@@ -32,11 +32,11 @@ class OdooClientJSON(OdooClientBase):
             "params": params,
             "id": random.randint(0, 1000000000),
         }
-        url = self._json_url
-        resp = self.session.post(url, json=data)
+        resp = self.session.post(self.__json_url, json=data)
+        resp.raise_for_status()
         reply = resp.json()
         if reply.get("error"):
-            raise RuntimeError(reply["error"])
+            raise OdooServerError(reply["error"])
         return reply["result"]
 
     def _call(self, service, method, *args):

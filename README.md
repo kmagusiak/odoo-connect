@@ -7,8 +7,8 @@ A simple library to use Odoo RPC.
 ## Usage
 
 	import odoo_connect
-	odoo = odoo_connect.connect(url='http://localhost', username='admin', password='admin')
-	so = odoo.env['sale.order']
+	odoo = env = odoo_connect.connect(url='http://localhost', username='admin', password='admin')
+	so = env['sale.order']
 	so.search_read([('create_uid', '=', 1)], [])
 
 ## Rationale
@@ -36,9 +36,34 @@ where some other code set product_uom_qty to 0 before you increment it.
 		if line.product_uom_qty > 1:
 			line.product_uom_qty += 1
 
+## Export and import data
+
+A separate package provides utilities to more easily extract data from Odoo.
+It also contains utility to get binary data (attachments) and reports.
+
+The following function will return a table-like (list of lists) structure
+with the requested data.
+You can also pass filter names or export names instead of, respectively,
+domains and fields. Note that this doesn't support groupping.
+
+	# Read data as usual
+	env['sale.order'].search_read_dict([('state', '=', 'sale')], ['name', 'partner_id.name'])
+	env['sale.order'].read_group([], ['amount_untaxed'], ['partner_id', 'create_date:month'])
+
+	# Export data
+	import odoo_connect.data as odoo_data
+	so = env['sale.order']
+	data = odoo_data.export_data(so, [('state', '=', 'sale')], ['name', 'partner_id.name'])
+	odoo_data.add_url(so, data)
+
+	# Import data
+	odoo_data.load_data(so, data)  # use Odoo's load()
+	odoo_data.load_data_write(env['res.partner'], [{'name': 'Max'}])  # use create()
+
 ## Development
 
 You can use a vscode container and open this repository inside it.
+Alternatively, clone and setup the repository manually.
 
 	git clone $url
 	cd odoo-connect

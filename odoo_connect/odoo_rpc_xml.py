@@ -1,7 +1,7 @@
 import functools
 import xmlrpc.client
 
-from .odoo_rpc_base import OdooClientBase, urljoin
+from .odoo_rpc_base import OdooClientBase, OdooServerError, urljoin
 
 __doc__ = """
 Uses xmlrpc for the client.
@@ -28,5 +28,5 @@ class OdooClientXML(OdooClientBase):
         cli = self.client.get(service)
         m = cli and getattr(cli, method, None)
         if not m:
-            raise Exception('Service {service} does not have {method}')
+            raise OdooServerError('Service {service} does not have {method}')
         return m(*args)

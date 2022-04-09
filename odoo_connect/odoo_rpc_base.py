@@ -1,4 +1,5 @@
 import logging
+import re
 from abc import ABC, abstractmethod
 from typing import Dict, List, Union
 
@@ -14,6 +15,31 @@ def urljoin(base, *parts):
     if base.endswith("/"):
         base = base[:-1]
     return "/".join([base] + [p.strip("/") for p in parts])
+
+
+def get_month(value: str) -> int:
+    """Get the month number from a month name"""
+    month = value.lower()[:3]
+    return {
+        'jan': 1,
+        'feb': 2,
+        'mar': 3,
+        'apr': 4,
+        'may': 5,
+        'jun': 6,
+        'jul': 7,
+        'aug': 8,
+        'sep': 9,
+        'oct': 10,
+        'nov': 11,
+        'dec': 12,
+    }.get(month, 0)
+
+
+class OdooServerError(RuntimeError):
+    """Error returned by Odoo"""
+
+    pass
 
 
 class OdooClientBase(ABC):
@@ -57,7 +83,7 @@ class OdooClientBase(ABC):
             user_agent_env,
         )
         if not self._uid:
-            raise RuntimeError('Failed to authenticate user %s' % username)
+            raise OdooServerError('Failed to authenticate user %s' % username)
 
     @abstractmethod
     def _call(self, service: str, method: str, *args):
@@ -92,10 +118,10 @@ class OdooClientBase(ABC):
         if check:
             try:
                 # call any method to check if the call works
-                model.default_get(['id'])
+                # let's fetch the fields (which we probably will do anyways)
+                model.fields()
             except:  # noqa: E722
-                # Return none if didn't verify
-                return None
+                raise OdooServerError('Model %s not found' % model)
         return model
 
     def list_databases(self) -> List[str]:
@@ -252,8 +278,72 @@ class OdooModel:
             return fields
         raise ValueError('Invalid fields parameter: %s' % fields)
 
+    def __read_dict_date(self, data, fields):
+        """Transform dates into ISO-like format"""
+        for field in fields:
+            mapper = None
+            if field.endswith(':quarter'):
+                regex = re.compile(r'Q(\d) (\d+)')
+
+                def mapper(v, range):
+                    m = v and regex.match(v)
+                    return "%s-Q%d" % (m.group(2), int(m.group(1))) if m else v
+
+            elif field.endswith(':month'):
+                regex = re.compile(r'(\w+) (\d+)')
+
+                def mapper(v, range):
+                    m = v and regex.match(v)
+                    return "%s-%02d" % (m.group(2), get_month(m.group(1))) if m else v
+
+            elif field.endswith(':week'):
+                regex = re.compile(r'W(\w+) (\d+)')
+
+                def mapper(v, range):
+                    m = v and regex.match(v)
+                    return "%s-W%02d" % (m.group(2), int(m.group(1))) if m else v
+
+            elif field.endswith(':day'):
+                regex = re.compile(r'(\d+) (\w+) (\d+)')
+
+                def mapper(v, range):
+                    m = v and regex.match(v)
+                    return (
+                        "%s-%02d-%02d" % (m.group(3), get_month(m.group(2)), int(m.group(1)))
+                        if m
+                        else v
+                    )
+
+            elif field.endswith(':hour'):
+                regex = re.compile(r'(\d+):00 (\d+) (\w+)')
+
+                def mapper(v, range):
+                    if not v:
+                        return v
+                    date = range.get('from')
+                    return date if date else v
+
+            if mapper:
+                raw_field = field.split(':', 1)[0]
+                for d in data:
+                    d_range = d.get('__range')
+                    if d_range:
+                        d_range = d_range.get(raw_field)
+                    else:
+                        d_range = {}
+                        for e in d['__domain']:
+                            if isinstance(e, list) and len(e) == 3 and e[0] == raw_field:
+                                if e[1] == ">=" and 'from' not in d_range:
+                                    d_range['from'] = e[2]
+                                elif e[1] == "<" and 'to' not in d_range:
+                                    d_range['to'] = e[2]
+                    d[field] = mapper(d[field], d_range)
+        return data
+
     def __read_dict_recursive(self, data, fields):
         """For each field, read recursively the data"""
+        if not fields:
+            fields = {f: {} for f in self.fields()}
         for field_name, child_fields in fields.items():
             field_info = self.fields().get(field_name, {})
             model_name = field_info.get('relation')
@@ -337,3 +427,20 @@ class OdooModel:
         fields = self.__prepare_dict_fields(fields)
         data = self.search_read(domain, list(fields), **kwargs)
         return self.__read_dict_recursive(data, fields)
+
+    def read_group_dict(self, domain, aggregates, groupby, **kwargs):
+        """Search read groupped data
+
+        :param domain: The domain for the search
+        :param aggregates: The aggregates
+        :param groupby: Fields to group by
+        :return: A list of groupped date
+        """
+        groupby = self.__prepare_dict_fields(groupby)
+        groupby_list = list(groupby)
+        if not groupby_list:
+            raise ValueError('Missing groupby values')
+        kwargs['lazy'] = False
+        data = self.read_group(domain, aggregates or ['id'], groupby_list, **kwargs)
+        data = self.__read_dict_date(data, groupby_list)
+        return self.__read_dict_recursive(data, groupby)
