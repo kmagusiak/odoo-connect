@@ -49,9 +49,10 @@ def test_add_url(odoo_cli):
 
 def test_add_url_list(odoo_cli):
     model = odoo_cli['res.partner']
-    data = [[4]]
+    data = [['id'], [4]]
     odoo_data.add_url(model, data)
-    assert model.model in data[0][1]
+    assert 'url' in data[0]
+    assert model.model in data[1][1]
 
 
 @pytest.mark.parametrize(

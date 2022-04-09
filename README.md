@@ -52,9 +52,13 @@ domains and fields. Note that this doesn't support groupping.
 
 	# Export data
 	import odoo_connect.data as odoo_data
-	odoo_data.export_data(env['sale.order'], [('state', '=', 'sale')], ['name', 'partner_id.name'])
+	so = env['sale.order']
+	data = odoo_data.export_data(so, [('state', '=', 'sale')], ['name', 'partner_id.name'])
+	odoo_data.add_url(so, data)
 
-	# TODO import data
+	# Import data
+	odoo_data.load_data(so, data)  # use Odoo's load()
+	odoo_data.load_data_write(env['res.partner'], [{'name': 'Max'}])  # use create()
 
 ## Development
 

@@ -315,12 +315,26 @@ class OdooModel:
                 regex = re.compile(r'(\d+):00 (\d+) (\w+)')
 
                 def mapper(v, range):
-                    return range.get('from') or v
+                    if not v:
+                        return v
+                    date = range.get('from')
+                    return date if date else v
 
             if mapper:
                 raw_field = field.split(':', 1)[0]
                 for d in data:
-                    d[field] = mapper(d[field], d['__range'][raw_field])
+                    d_range = d.get('__range')
+                    if d_range:
+                        d_range = d_range.get(raw_field)
+                    else:
+                        d_range = {}
+                        for e in d['__domain']:
+                            if isinstance(e, list) and len(e) == 3 and e[0] == raw_field:
+                                if e[1] == ">=" and 'from' not in d_range:
+                                    d_range['from'] = e[2]
+                                elif e[1] == "<" and 'to' not in d_range:
+                                    d_range['to'] = e[2]
+                    d[field] = mapper(d[field], d_range)
         return data
 
     def __read_dict_recursive(self, data, fields):
