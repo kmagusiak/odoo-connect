@@ -1,7 +1,7 @@
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 __doc__ = """
 Base class for Odoo RPC.
@@ -47,6 +47,7 @@ class OdooClientBase(ABC):
 
     url: str
     _models: Dict[str, "OdooModel"]
+    _version: Dict[str, Any]
 
     def __init__(self, *, url, database, username=None, password=None, **_kwargs):
         """Create new connection and authenicate when username is given."""
@@ -65,6 +66,7 @@ class OdooClientBase(ABC):
         else:
             self.authenticate(None, None)
         self._models = {}
+        self._version = None
 
     def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
@@ -156,10 +158,17 @@ class OdooClientBase(ABC):
 
     def version(self) -> dict:
         """Get the version information from the server"""
-        return self._call(
+        if self._version:
+            return self._version
+        self._version = self._call(
             "common",
             "version",
         )
+        return self._version
+
+    @property
+    def major_version(self) -> int:
+        return self.version()['server_version_info'][0]
 
     @property
     @abstractmethod
@@ -322,11 +331,12 @@ class OdooModel:
 
             if mapper:
                 raw_field = field.split(':', 1)[0]
+                has_range = self.odoo.major_version >= 15
                 for d in data:
-                    d_range = d.get('__range')
-                    if d_range:
-                        d_range = d_range.get(raw_field)
+                    if has_range:
+                        d_range = d['__range'].get(raw_field)
                     else:
+                        # parse the domain to get the range
                         d_range = {}
                         for e in d['__domain']:
                             if isinstance(e, list) and len(e) == 3 and e[0] == raw_field:
