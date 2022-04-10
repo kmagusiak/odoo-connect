@@ -33,9 +33,23 @@ def test_binary_encoding_empty():
         ('char', 'default', '', False),
     ],
 )
-def test_formatter(type_name, func, input, expected):
+def test_format(type_name, func, input, expected):
     formatter = getattr(odoo_data, "format_%s" % func)
     assert formatter(input) == expected, "Couldn't format %s" % type_name
+
+
+def test_formatter():
+    f = odoo_data.Formatter()
+    f['d'] = odoo_data.format_date
+    f.field_map['X'] = 'y'
+    f.field_map['removed'] = ''
+    assert f.map_field('X') == 'y'
+    d = f.format_dict({'d': '2022-01-01 15:10:05', 'X': 'value y', 'def': 'ok ', 'removed': 1})
+    print(d)
+    assert d['d'] == '2022-01-01'
+    assert 'X' not in d and d['y'] == 'value y'
+    assert d['def'] == 'ok'
+    assert 'removed' not in d
 
 
 def test_add_field(odoo_cli, odoo_json_rpc_handler):

@@ -176,7 +176,8 @@ def format_binary(v: Union[bytes, str]) -> str:
 class Formatter(defaultdict):
     """Format fields into a format expected by Odoo."""
 
-    """Transformations to apply to source fields"""
+    """Transformations to apply to source fields.
+    Use an empty string to mask some of them."""
     field_map: Dict[str, str]
 
     def __init__(self, model: OdooModel = None, *, lower_case_fields: bool = False):
@@ -213,7 +214,7 @@ class Formatter(defaultdict):
     def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
         """Apply formatting to each field"""
         d_renamed = [(self.map_field(f), v) for f, v in d.items()]
-        return {f: self[f](v) for f, v in d_renamed if f not in NOT_FORMATTED_FIELDS}
+        return {f: self[f](v) for f, v in d_renamed if f and f not in NOT_FORMATTED_FIELDS}
 
 
 def make_batches(
@@ -297,7 +298,7 @@ def load_data(
     else:
         raise Exception('Unsupported method row type: %s' % method_row_type)
 
-    log.info("Load data using %s(), %d records", method, len(data))
+    log.info("Load data using %s.%s(), %d records", model.model, method, len(data))
     if method == 'load':
         fields = [f.replace('.', '/') for f in fields]
         return model.execute(method, fields=fields, data=data)
