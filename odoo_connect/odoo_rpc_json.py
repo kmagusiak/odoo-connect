@@ -33,8 +33,12 @@ class OdooClientJSON(OdooClientBase):
             "id": random.randint(0, 1000000000),
         }
         resp = self.session.post(self.__json_url, json=data)
+        try:
+            reply = resp.json()
+        except requests.JSONDecodeError:
+            resp.raise_for_status()
+            raise
         resp.raise_for_status()
-        reply = resp.json()
         if reply.get("error"):
             raise OdooServerError(reply["error"])
         return reply["result"]

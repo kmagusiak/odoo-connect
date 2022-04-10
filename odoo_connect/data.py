@@ -1,8 +1,9 @@
 import base64
 import json
+import logging
 from collections import defaultdict
 from datetime import date, datetime
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, overload
+from typing import Any, Dict, Iterable, List, Tuple, Union, overload
 
 from .odoo_rpc import OdooClientBase, OdooModel, urljoin
 
@@ -172,139 +173,182 @@ def format_binary(v: Union[bytes, str]) -> str:
     return str(encoded, 'ascii') or False
 
 
-@overload
-def get_formatter(type_name: str) -> Callable:
-    ...
+class Formatter(defaultdict):
+    """Format fields into a format expected by Odoo."""
+
+    def __init__(self, model: OdooModel = None, *, lower_case_fields: bool = False):
+        super().__init__(lambda: format_default)
+        self.model = model
+        self.lower_case_fields = lower_case_fields
+
+        # set the formats from the model
+        if model:
+            formatters = {
+                'datetime': format_datetime,
+                'date': format_date,
+                'binary': format_binary,
+                'image': format_binary,
+            }
+            for field, info in model.fields().items():
+                formatter = formatters.get(info.get('type'), format_default)
+                if formatter is not format_default:
+                    self.setdefault(field, formatter)
+
+    def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply formatting to each field"""
+        return {
+            f.lower() if self.lower_case_fields else f: self[f](v)
+            for f, v in d.items()
+            if f not in NOT_FORMATTED_FIELDS
+        }
 
 
-@overload
-def get_formatter(model: OdooModel) -> defaultdict:  # [str, Callable]:
-    ...
+def make_batches(
+    data: Iterable[Dict], *, batch_size: int = 1000, group_by: str = None
+) -> Iterable[List[Dict]]:
+    """Split an interable to a batched iterable
 
-
-def get_formatter(model_or_type):
-    """Get a default formatter for fields in a model"""
-    # Get a formatter for a model
-    if isinstance(model_or_type, OdooModel):
-        format = defaultdict(lambda: format_default)
-        for field, info in model_or_type.fields().items():
-            formatter = get_formatter(info.get('type'))
-            if formatter is not format_default:
-                format.setdefault(field, formatter)
-        return format
-    # Get for a type
-    type_name = model_or_type
-    if type_name == 'datetime':
-        return format_datetime
-    elif type_name == 'date':
-        return format_date
-    elif type_name == 'binary':
-        return format_binary
-    return format_default
-
-
-def format_dict(d: Dict, formatter: defaultdict):
-    """Applies formatting to each field"""
-    return {f: formatter[f](v) for f, v in d.items() if f not in NOT_FORMATTED_FIELDS}
+    :param data: The iterable
+    :param batch_size: Target batch size (default: 1000)
+    :param group_by: field to group by (the value is kept in a single batch
+    :return: An iterable of batches
+    """
+    batch = []
+    if group_by:
+        data = sorted(data, key=lambda d: d[group_by])
+        group_value = None
+        for d in data:
+            current_value = d[group_by]
+            if len(batch) >= batch_size and group_value != current_value:
+                yield batch
+                batch = [d]
+            else:
+                batch.append(d)
+            group_value = current_value
+    else:
+        for d in data:
+            batch.append(d)
+            if len(batch) >= batch_size:
+                yield batch
+                batch = []
+    if batch:
+        yield batch
 
 
 def load_data(
-    model: OdooModel, data: List[List], *, fields: List[str] = None, formatter: defaultdict = None
-):
-    """Load the data into the model using Odoo's load() function.
-
-    A field list may be given separately, otherwise the first row is used.
-    Formats the values before sending them to Odoo.
-    """
-    if fields is None:
-        fields = data[0]
-        data = data[1:]
-    fields = [f.replace('.', '/') for f in fields]
-    if formatter is None:
-        formatter = get_formatter(model)
-    if formatter:
-        data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
-    return model.execute("load", fields=fields, data=data)
-
-
-def load_data_write(
     model: OdooModel,
-    data: Iterable[Dict],
+    data: List,
     *,
-    key: str = None,
-    batch_size: int = 1000,
-    formatter: defaultdict = None,
+    method: str = "load",
+    method_row_type=None,
+    fields: List[str] = None,
+    formatter: Formatter = None,
 ):
-    """Load the data into the model using write() and create().
+    """Load the data into the model.
 
-    For updating records, you must pass a key that will be used to match records.
-    Formats the values before sending them to odoo and splits into smaller batches"""
+    The method is executed given as parameter the formatted data
+    and when row type is list, fields is also passed by keyword.
+    If the row type is list and no fields are given, the first row is used.
+
+    The default method used is `load` where field name's "." are replaced with
+    "/" to make it work.
+    `write` is handled specially, by making write() and create() calls.
+    You can use `create` to insert new records.
+    Otherwise, the model can have a custom method you could use.
+
+    :param model: The model
+    :param data: The list of rows (dict or list)
+    :param method: The name of the method to call
+    :param method_row_type: The type of the rows; dict (default) or list
+    :param fields: List of field name for list rows
+    :param formatter: The formatter to use
+    :return: The result of the method call
+    """
+    log = logging.getLogger(__name__)
+
+    if method == 'load':
+        method_row_type = list
+    elif method_row_type is None or method in ('create', 'write'):
+        method_row_type = dict
+    log.debug("Load: %s(), row type is %s", method, method_row_type)
+
     if formatter is None:
-        formatter = get_formatter(model)
-    assert batch_size > 0
-    if isinstance(data, list):
-        batches = (data[i : i + batch_size] for i in range(0, len(data), batch_size))
+        formatter = Formatter(model)
+
+    log.info("Load: convert and format data")
+    data, fields = __convert_to_type(data, fields, method_row_type)
+    if method_row_type == dict:
+        data = [formatter.format_dict(d) for d in data]
+    elif method_row_type == list:
+        data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
     else:
+        raise Exception('Unsupported method row type: %s' % method_row_type)
 
-        def make_batches():
-            batch = []
-            for d in data:
-                batch.append(d)
-                if len(batch) >= batch_size:
-                    yield batch
-                    batch = []
-            if batch:
-                yield batch
+    log.info("Load data using %s(), %d records", method, len(data))
+    if method == 'load':
+        fields = [f.replace('.', '/') for f in fields]
+        return model.execute(method, fields=fields, data=data)
+    if method == 'write':
+        return __load_data_write(model, data)
+    if fields:
+        return model.execute(method, data, fields=fields)
+    return model.execute(method, data)
 
-        batches = make_batches()
 
-    result = {
-        'write_count': 0,
-        'create_count': 0,
-    }
-    for batch in batches:
-        if formatter:
-            fbatch = [format_dict(d, formatter) for d in batch]
+def __convert_to_type(data, fields, row_type):
+    idata = iter(data)
+    first_row = next(idata, None)
+    if first_row is None:
+        return data, fields
+    if isinstance(first_row, list):
+        if fields is None:
+            logging.getLogger(__name__).debug("Load: using first row as field names")
+            fields = first_row
+            data = idata
+        elif not isinstance(data, list):
+            data = [first_row] + list(idata)
+        if row_type == dict:
+            data = ({f: d[i] for i, f in enumerate(fields)} for d in data)
+            return data, None
+        return data, fields
+    elif isinstance(first_row, dict):
+        if not isinstance(data, list):
+            data = [first_row] + list(idata)
+        if row_type == dict:
+            return data, None
+        if fields is None:
+            fields = list({k for d in data for k in d})
+        data = [[d.get(f) for f in fields] for d in data]
+        return data, fields
+    raise Exception('Unsupported type for loading data: %s' % type(first_row))
+
+
+def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
+    """Use multiple write() and create() calls to update data
+
+    :return: {'write_count': x, 'create_count': x, 'ids': [list of ids]}
+    """
+    create_data = []
+    ids = []
+    for d in data:
+        id = d.pop('id')
+        if id:
+            model.execute('write', id, d)
+            ids.append(id)
         else:
-            fbatch = batch
-        r = _load_data_batch(model, fbatch, key=key)
-        result['write_count'] += len(r['write'])
-        result['create_count'] += len(r['create'])
-    return result
-
-
-def _load_data_batch(model: OdooModel, data, *, key=None):
-    if not isinstance(data, list):
-        data = list(data)
-
-    # find the keys
-    if key == 'id':
-        existing_ids = set(model.exists([d['id'] for d in data]))
-        data_write = [(d['id'], d) for d in data if d['id'] in existing_ids]
-        data_create = [d for d in data if not d['id']]
-        if len(data_create) + len(data_write) != len(data):
-            raise Exception('Some IDs were not found in the database')
-    elif key is not None:
-        found = model.search_read([(key, 'in', [d[key] for d in data])], [key])
-        existing = {i[key]: i['id'] for i in found}
-        if len(found) != len(existing):
-            raise Exception('Some keys have multiple ids')
-        data_write = [(existing[d[key]], d) for d in data if d[key] in existing]
-        data_create = [d for d in data if d[key] not in existing]
-    else:
-        data_create = data
-        data_write = []
-
-    # write the data
-    for id, d in data_write:
-        model.write([id], d)
-    if data_create:
-        created_ids = model.create(data_create)
-    else:
-        created_ids = []
+            create_data.append(d)
+            ids.append(0)
+    if create_data:
+        created_ids = model.execute('create', create_data)
+        iids = iter(created_ids)
+        for i in range(len(ids)):
+            if not ids[i]:
+                ids[i] = next(iids)
+        assert next(iids, None) is None
     return {
-        'write': [(id, d[key]) for id, d in data_write],
-        'create': created_ids,
+        'write_count': len(data) - len(create_data),
+        'create_count': len(create_data),
+        'ids': ids,
     }
 
 
@@ -325,10 +369,12 @@ def export_data(
     :param expand_many: Flatten lists embedded in the result (default: False)
     :return: List of rows with data
     """
+    log = logging.getLogger(__name__)
     odoo = model.odoo
     kwargs = {}
 
     if isinstance(filter_or_domain, str):
+        log.debug('Get the filter from Odoo: %s', filter_or_domain)
         filter_data = odoo['ir.filters'].search_read_dict(
             [
                 ('name', '=', filter_or_domain),
@@ -347,6 +393,7 @@ def export_data(
         domain = filter_or_domain
 
     if isinstance(export_or_fields, str):
+        log.debug('Get the export lines: %s', export_or_fields)
         fields = odoo['ir.exports.line'].search_read(
             [
                 ('export_id.name', '=', export_or_fields),
@@ -356,16 +403,45 @@ def export_data(
         )
         fields = [f['name'].replace('/', '.') for f in fields]
     else:
+        log.debug('List of fields to export: %s', export_or_fields)
         fields = export_or_fields
     if not fields:
         raise ValueError('No fields to export')
 
+    log.info('Export: execute search on %s', model.model)
     records = model.search_read_dict(domain, fields)
 
+    log.info('Export: done, cleaning data')
     data = flatten(records, fields, expand_many=expand_many)
     if with_header:
         data.insert(0, [str(f) for f in fields])
     return data
+
+
+def add_fields(
+    model: OdooModel, data: List[Dict], by_field: str, fields: List[str] = ['id'], domain: List = []
+):
+    """Add fields by querying the model
+
+    :param model: The model
+    :param data: The list of dicts
+    :param by_field: The field name to use to find other fields
+    :param fields: The fields to get (default: ['id'])
+    :param domain: Additional domain to use
+    :raises Exception: When multiple results have the same by_field key
+    """
+    domain_by_field = [(by_field, 'in', [d[by_field] for d in data])]
+    domain = ['&'] + domain_by_field + domain if domain else domain_by_field
+    fetched_data = model.search_read_dict(domain, fields + [by_field])
+    index = {d.pop(by_field): d for d in fetched_data}
+    if len(index) != len(fetched_data):
+        raise Exception('%s is not unique in %s when adding fields' % (by_field, model.model))
+    for d in data:
+        updates = index.get(d[by_field])
+        if updates:
+            d.update(updates)
+        else:
+            d.update({f: None for f in fields})
 
 
 def add_url(model: OdooModel, data: List, *, model_id_func=None, url_field='url'):
@@ -451,10 +527,10 @@ __all__ = [
     'get_attachments',
     'get_report',
     'get_reports',
-    'get_formatter',
-    'format_dict',
+    'Formatter',
+    'make_batches',
     'load_data',
-    'load_data_write',
     'export_data',
+    'add_fields',
     'add_url',
 ]

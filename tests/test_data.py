@@ -8,7 +8,7 @@ import odoo_connect.data as odoo_data
 
 def test_binary_encoding():
     bin = b'OK'
-    value = odoo_data.get_formatter('binary')(bin)
+    value = odoo_data.format_binary(bin)
     assert isinstance(value, str)
     assert len(value) == math.ceil(len(bin) / 3) * 4
 
@@ -17,24 +17,57 @@ def test_binary_encoding():
 
 
 def test_binary_encoding_empty():
-    assert odoo_data.get_formatter('binary')(b'') is False
+    assert odoo_data.format_binary(b'') is False
 
 
 @pytest.mark.parametrize(
-    "type_name,input,expected",
+    "type_name,func,input,expected",
     [
-        ('char', 'test', 'test'),
-        ('int', 3, 3),
-        ('date', datetime(2020, 2, 2, 3), "2020-02-02"),
-        ('date', "2020-02-02 03:00:00.3", "2020-02-02"),
-        ('datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
-        ('datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
-        ('binary', b'', False),
-        ('char', '', False),
+        ('char', 'default', 'test', 'test'),
+        ('int', 'default', 3, 3),
+        ('date', 'date', datetime(2020, 2, 2, 3), "2020-02-02"),
+        ('date', 'date', "2020-02-02 03:00:00.3", "2020-02-02"),
+        ('datetime', 'datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
+        ('datetime', 'datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
+        ('binary', 'binary', b'', False),
+        ('char', 'default', '', False),
     ],
 )
-def test_formatter(type_name, input, expected):
-    assert odoo_data.get_formatter(type_name)(input) == expected
+def test_formatter(type_name, func, input, expected):
+    formatter = getattr(odoo_data, "format_%s" % func)
+    assert formatter(input) == expected, "Couldn't format %s" % type_name
+
+
+def test_add_field(odoo_cli, odoo_json_rpc_handler):
+    handler = odoo_json_rpc_handler
+
+    @handler.patch_execute_kw('res.partner', 'read')
+    def read_partner(id, fields=[]):
+        return [{'id': 1, 'name': 'test'}]
+
+    @handler.patch_execute_kw('res.partner', 'search_read')
+    def read_search_partner(domain, fields=[]):
+        print(domain)
+        data = [{'id': 1, 'name': 'test'}]
+        if not fields:
+            return data
+        if 'id' not in fields:
+            fields += 'id'
+        return [{k: v for k, v in d.items() if k in fields} for d in data]
+
+    @handler.patch_execute_kw('res.partner', 'fields_get')
+    def read_fields_partner(allfields=[], attributes=[]):
+        attr = {a: True if a == 'store' else False for a in attributes}
+        return {
+            'id': {**attr, 'type': 'int', 'string': 'ID'},
+            'name': {**attr, 'type': 'char', 'string': 'Name'},
+        }
+
+    model = odoo_cli['res.partner']
+    data = model.read(1, ['name'])
+    id = data[0].pop('id')
+    odoo_data.add_fields(model, data, 'name', ['id'])
+    assert data[0].get('id') == id
 
 
 def test_add_url(odoo_cli):
