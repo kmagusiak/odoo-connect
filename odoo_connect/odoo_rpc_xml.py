@@ -1,7 +1,7 @@
 import functools
 import xmlrpc.client
 
-from .odoo_rpc_base import OdooClientBase, OdooServerError, urljoin
+from .odoo_rpc import OdooClientBase, OdooServerError, urljoin
 
 __doc__ = """
 Uses xmlrpc for the client.

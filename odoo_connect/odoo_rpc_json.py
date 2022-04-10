@@ -3,7 +3,7 @@ import random
 
 import requests
 
-from .odoo_rpc_base import OdooClientBase, OdooServerError, urljoin
+from .odoo_rpc import OdooClientBase, OdooServerError, urljoin
 
 __doc__ = """
 Uses requests and json to call Odoo

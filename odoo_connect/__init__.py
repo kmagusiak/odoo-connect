@@ -1,6 +1,6 @@
 import urllib.parse
 
-from .odoo_rpc_base import OdooClientBase, OdooModel  # noqa
+from .odoo_rpc import OdooClientBase, OdooModel  # noqa
 
 __doc__ = """
 Simple Odoo RPC library.

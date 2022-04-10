@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, overload
 
-from .odoo_rpc_base import OdooClientBase, OdooModel, urljoin
+from .odoo_rpc import OdooClientBase, OdooModel, urljoin
 
 __doc__ = """
 Export and import data from Odoo.
