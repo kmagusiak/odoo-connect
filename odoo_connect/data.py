@@ -176,10 +176,19 @@ def format_binary(v: Union[bytes, str]) -> str:
 class Formatter(defaultdict):
     """Format fields into a format expected by Odoo."""
 
+    """Transformations to apply to source fields"""
+    field_map: Dict[str, str]
+
     def __init__(self, model: OdooModel = None, *, lower_case_fields: bool = False):
+        """New formatter
+
+        :param model: The model for which the formatter is generated (initializes formatters)
+        :param lower_case_fields: Whether to transform source fields into lower-case
+        """
         super().__init__(lambda: format_default)
         self.model = model
         self.lower_case_fields = lower_case_fields
+        self.field_map = {}
 
         # set the formats from the model
         if model:
@@ -194,13 +203,17 @@ class Formatter(defaultdict):
                 if formatter is not format_default:
                     self.setdefault(field, formatter)
 
+    def map_field(self, name):
+        """Transform a source field name into model's name"""
+        name = self.field_map.get(name, name)
+        if self.lower_case_fields:
+            name = name.lower()
+        return name
+
     def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
         """Apply formatting to each field"""
-        return {
-            f.lower() if self.lower_case_fields else f: self[f](v)
-            for f, v in d.items()
-            if f not in NOT_FORMATTED_FIELDS
-        }
+        d_renamed = [(self.map_field(f), v) for f, v in d.items()]
+        return {f: self[f](v) for f, v in d_renamed if f not in NOT_FORMATTED_FIELDS}
 
 
 def make_batches(
