@@ -102,6 +102,26 @@ def test_add_url_list(odoo_cli):
     assert model.model in data[1][1]
 
 
+def test_add_xml_id(odoo_cli, odoo_json_rpc_handler):
+    handler = odoo_json_rpc_handler
+
+    @handler.patch_execute_kw('ir.model.data', 'search_read')
+    def read_search_data(domain, fields=[]):
+        print(domain)
+        data = [{'id': 1, 'res_id': 4, 'model': 'res.partner', 'complete_name': 'test.myid'}]
+        if not fields:
+            return data
+        if 'id' not in fields:
+            fields += 'id'
+        return [{k: v for k, v in d.items() if k in fields} for d in data]
+
+    model = odoo_cli['res.partner']
+    data = [{'id': 4}, {'id': 9}]
+    odoo_data.add_xml_id(model, data)
+    assert 'test.myid' == data[0]['xml_id']
+    assert not data[1]['xml_id']
+
+
 @pytest.mark.parametrize(
     "dict,fields,expected",
     [

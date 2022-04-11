@@ -458,13 +458,56 @@ def add_fields(
             d.update({f: None for f in fields})
 
 
+def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_id'):
+    """Add a field containg the xml_id
+
+    :param model: The model
+    :param data: The list of dicts or rows (list to append to)
+    :param id_name: The name of the field to get the resource ids (default: 'id')
+    :param xml_id_field: The name of the xmlid field (default: 'xml_id')
+    """
+    if id_name != 'id':
+        relation = model.fields()[id_name].get('relation')
+        model = model.odoo.get_model(relation, check=True)
+    id_index = False
+    ids = set()
+    for row_num, row in enumerate(data):
+        if isinstance(row, dict):
+            ids.add(row[id_name])
+        elif isinstance(row, list):
+            if row_num == 0:
+                id_index = row.index(id_name)
+            else:
+                ids.add(row[id_index])
+        else:
+            raise TypeError('Cannot append the url to %s' % type(row))
+    xml_ids = {
+        i['res_id']: i['complete_name']
+        for i in model.odoo['ir.model.data'].search_read(
+            [('model', '=', model.model), ('res_id', 'in', list(ids))],
+            ['complete_name', 'res_id'],
+        )
+    }
+    if id_index is False:
+        # we have dicts
+        for row in data:
+            row[xml_id_field] = xml_ids.get(row[id_name], False)
+    else:
+        # we have a list
+        for row_num, row in enumerate(data):
+            if row_num == 0:
+                row.append(xml_id_field)
+            else:
+                row.append(xml_ids.get(row[id_index], False))
+
+
 def add_url(model: OdooModel, data: List, *, model_id_func=None, url_field='url'):
     """Add an URL field to data
 
     :param model: The model
     :param data: The list of dicts or rows (list to append to)
     :param model_id_func: The function to get a tuple (model_name, id)
-    :param url_field: The name of the URL field for dicts (default: url)
+    :param url_field: The name of the URL field (default: 'url')
     """
     base_url = model.odoo.url
     if not model_id_func and data:
@@ -547,4 +590,5 @@ __all__ = [
     'export_data',
     'add_fields',
     'add_url',
+    'add_xml_id',
 ]
