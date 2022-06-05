@@ -1,14 +1,14 @@
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 __doc__ = """
 Base class for Odoo RPC.
 """
 
 
-def urljoin(base, *parts):
+def urljoin(base: str, *parts) -> str:
     """Simple URL joining"""
     if not parts:
         return base
@@ -48,8 +48,17 @@ class OdooClientBase(ABC):
     url: str
     _models: Dict[str, "OdooModel"]
     _version: Dict[str, Any]
+    _database: str
 
-    def __init__(self, *, url, database, username=None, password=None, **_kwargs):
+    def __init__(
+        self,
+        *,
+        url: str,
+        database: str,
+        username: str = None,
+        password: str = None,
+        **_kwargs,
+    ):
         """Create new connection and authenicate when username is given."""
         log = logging.getLogger(__name__)
         self.url = url
@@ -64,18 +73,18 @@ class OdooClientBase(ABC):
             self.authenticate(username, password)
             log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
         else:
-            self.authenticate(None, None)
+            self.authenticate('', None)
         self._models = {}
-        self._version = None
+        self._version = {}
 
-    def authenticate(self, username: str, password: str):
+    def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
         self._username = username
         self._password = password
         if not username:
             self._uid = None
             return
-        user_agent_env = {}
+        user_agent_env = {}  # type: ignore
         self._uid = self._call(
             "common",
             "authenticate",
@@ -94,6 +103,8 @@ class OdooClientBase(ABC):
 
     def _execute_kw(self, model: str, method: str, *args, **kw):
         """Execute a method on a model"""
+        if not self._uid:
+            raise RuntimeError('You must authenticate first')
         return self._call(
             "object",
             "execute_kw",
@@ -135,7 +146,9 @@ class OdooClientBase(ABC):
         models = self.get_model('ir.model').search_read([], ['model'])
         return [m['model'] for m in models]
 
-    def ref(self, xml_id: str, fields: List[str] = [], raise_if_not_found: bool = True) -> dict:
+    def ref(
+        self, xml_id: str, fields: List[str] = [], raise_if_not_found: bool = True
+    ) -> Optional[Dict]:
         """Read the record corresponding to the given `xml_id`."""
         if '.' not in xml_id:
             raise ValueError('xml_id not valid')
@@ -154,7 +167,7 @@ class OdooClientBase(ABC):
             raise ValueError(
                 'No record found for unique ID %s. It may have been deleted.' % (xml_id)
             )
-        return False
+        return {}
 
     def version(self) -> dict:
         """Get the version information from the server"""
@@ -258,12 +271,12 @@ class OdooModel:
                 allfields=[],
                 attributes=['string', 'type', 'readonly', 'required', 'store', 'relation'],
             )
-        return self._field_info
+        return self._field_info  # type: ignore
 
     def __prepare_dict_fields(self, fields: Union[List[str], Dict[str, Dict]]) -> Dict[str, Dict]:
         """Make sure fields is a dict representing the data to get"""
         if isinstance(fields, list):
-            new_fields = {}
+            new_fields: Dict[str, Dict] = {}
             for field in fields:
                 level = new_fields
                 for f in field.split('.'):
@@ -412,9 +425,10 @@ class OdooModel:
         :param kwargs: Other arguments passed to search_read (limit, offet, orderby, etc.)
         :return: A list of found objects
         """
-        single = isinstance(ids, int)
-        if single:
+        single = False
+        if isinstance(ids, int):
             ids = [ids]
+            single = True
         fields = self.__prepare_dict_fields(fields)
         data = self.read(ids, list(fields))
         result = self.__read_dict_recursive(data, fields)

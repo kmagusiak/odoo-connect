@@ -1,4 +1,5 @@
 import json
+import typing
 
 import pytest
 from werkzeug.wrappers import Request, Response
@@ -71,7 +72,7 @@ class OdooRPCHandler:
     def __call__(self, request: Request):
         """Handle a jsonrpc request for the method call"""
         assert request.content_type == "application/json"
-        data = request.json
+        data = typing.cast(dict, request.json)
         assert data["jsonrpc"] == "2.0" and data["id"]
         assert data["method"] == "call", "Only call method is implemented"
         status = 200

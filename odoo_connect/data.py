@@ -3,7 +3,7 @@ import json
 import logging
 from collections import defaultdict
 from datetime import date, datetime
-from typing import Any, Dict, Iterable, List, Tuple, Union, overload
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, overload
 
 from .odoo_rpc import OdooClientBase, OdooModel, urljoin
 
@@ -37,13 +37,13 @@ NOT_FORMATTED_FIELDS = {
 
 
 @overload
-def get_attachment(model: OdooModel, attachment_id: int) -> bytes:
+def get_attachment(model: OdooModel, id: int) -> bytes:
     """Get attachment by ID"""
     ...
 
 
 @overload
-def get_attachment(model: OdooModel, encoded_value: str) -> bytes:
+def get_attachment(model: OdooModel, *, encoded_value: str) -> bytes:
     """Get attachment from base64 encoded value"""
     ...
 
@@ -54,18 +54,17 @@ def get_attachment(model: OdooModel, id: int, field_name: str) -> bytes:
     ...
 
 
-def get_attachment(model, value_or_id, field_name=None) -> bytes:
-    if not value_or_id:
+def get_attachment(
+    model: OdooModel, id: int = 0, field_name: str = None, encoded_value: str = None
+) -> bytes:
+    if encoded_value is not None:
+        return decode_bytes(encoded_value)
+    if not id:
         return b''
-    # we have a value, decode it
-    if not isinstance(value_or_id, int):
-        if field_name is not None:
-            raise ValueError("Unexpected argument field_name because we don't have an id")
-        return decode_bytes(value_or_id)
     # if we have a field name, decode the value or get the ID
     if field_name:
         field_info = model.fields().get(field_name, {})
-        record = model.read(value_or_id, [field_name])
+        record = model.read(id, [field_name])
         value = record[0][field_name]
         if field_info.get("relation") == "ir.attachment":
             if field_info.get("type") != "many2one":
@@ -77,9 +76,11 @@ def get_attachment(model, value_or_id, field_name=None) -> bytes:
             value = value[0]
         elif field_info.get("type") != "binary":
             raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
-        return get_attachment(model, value)
+        if isinstance(value, int):
+            return get_attachment(model, value)
+        return decode_bytes(value)
     # read the attachment
-    return get_attachments(model.odoo, [value_or_id])[0][1]
+    return get_attachments(model.odoo, [id])[0][1]
 
 
 def decode_bytes(value) -> bytes:
@@ -170,7 +171,7 @@ def format_binary(v: Union[bytes, str]) -> str:
     if isinstance(v, str):
         v = bytes(v, 'utf-8')
     encoded = base64.b64encode(v)
-    return str(encoded, 'ascii') or False
+    return str(encoded, 'ascii')
 
 
 class Formatter(defaultdict):
@@ -200,7 +201,7 @@ class Formatter(defaultdict):
                 'image': format_binary,
             }
             for field, info in model.fields().items():
-                formatter = formatters.get(info.get('type'), format_default)
+                formatter = formatters.get(cast(str, info.get('type')), format_default)
                 if formatter is not format_default:
                     self.setdefault(field, formatter)
 
@@ -227,7 +228,7 @@ def make_batches(
     :param group_by: field to group by (the value is kept in a single batch
     :return: An iterable of batches
     """
-    batch = []
+    batch: List[Dict] = []
     if group_by:
         data = sorted(data, key=lambda d: d[group_by])
         group_value = None
@@ -251,11 +252,11 @@ def make_batches(
 
 def load_data(
     model: OdooModel,
-    data: List,
+    data: Iterable,
     *,
     method: str = "load",
     method_row_type=None,
-    fields: List[str] = None,
+    fields: Optional[List[str]] = None,
     formatter: Formatter = None,
 ):
     """Load the data into the model.
@@ -290,10 +291,12 @@ def load_data(
         formatter = Formatter(model)
 
     log.info("Load: convert and format data")
-    data, fields = __convert_to_type(data, fields, method_row_type)
     if method_row_type == dict:
-        data = [formatter.format_dict(d) for d in data]
+        ddata, dfields = __convert_to_type_dict(data, fields)
+        fields = dfields or []
+        data = [formatter.format_dict(d) for d in ddata]
     elif method_row_type == list:
+        data, fields = __convert_to_type_list(data, fields)
         data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
     else:
         raise Exception('Unsupported method row type: %s' % method_row_type)
@@ -309,32 +312,49 @@ def load_data(
     return model.execute(method, data)
 
 
-def __convert_to_type(data, fields, row_type):
+def __convert_to_type_list(
+    data: Iterable, fields: Optional[List[str]]
+) -> Tuple[Iterable[List], List[str]]:
     idata = iter(data)
     first_row = next(idata, None)
     if first_row is None:
-        return data, fields
+        return [], fields or ['id']
+    if not isinstance(first_row, list):
+        if not fields:
+            raise RuntimeError('Missing fields to convert into type list')
+        data = ([d.get(f) for f in fields] for d in data)
+    elif fields is None:
+        logging.getLogger(__name__).debug("Load: using first row as field names")
+        fields = first_row
+        data = idata
+    if not isinstance(data, list):
+        data = list(data)
+    return list(data), fields
+
+
+def __convert_to_type_dict(
+    data: Iterable, fields: Optional[List[str]]
+) -> Tuple[Iterable[Dict], Optional[List[str]]]:
+    idata = iter(data)
+    first_row = next(idata, None)
+    if first_row is None:
+        return [], fields
     if isinstance(first_row, list):
         if fields is None:
-            logging.getLogger(__name__).debug("Load: using first row as field names")
             fields = first_row
-            data = idata
-        elif not isinstance(data, list):
-            data = [first_row] + list(idata)
-        if row_type == dict:
-            data = ({f: d[i] for i, f in enumerate(fields)} for d in data)
-            return data, None
-        return data, fields
-    elif isinstance(first_row, dict):
-        if not isinstance(data, list):
-            data = [first_row] + list(idata)
-        if row_type == dict:
-            return data, None
-        if fields is None:
-            fields = list({k for d in data for k in d})
-        data = [[d.get(f) for f in fields] for d in data]
-        return data, fields
-    raise Exception('Unsupported type for loading data: %s' % type(first_row))
+            data = (dict(zip(fields, d)) for d in idata)
+        else:
+            if not isinstance(data, list):
+                data = [first_row] + list(idata)
+            if fields:
+                data = ({f: d[i] for i, f in enumerate(fields)} for d in data)
+    elif not isinstance(data, list):
+        data = [first_row] + list(idata)
+    if not isinstance(data, list):
+        data = list(data)
+    if fields is None:
+        fields = list({k for d in data for k in d})
+    return list(data), fields
 
 
 def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
@@ -444,8 +464,8 @@ def add_fields(
     :param domain: Additional domain to use
     :raises Exception: When multiple results have the same by_field key
     """
-    domain_by_field = [(by_field, 'in', [d[by_field] for d in data])]
-    domain = ['&'] + domain_by_field + domain if domain else domain_by_field
+    domain_by_field: List[Any] = [(by_field, 'in', [d[by_field] for d in data])]
+    domain = ['&'] + domain_by_field + (domain if domain else domain_by_field)
     fetched_data = model.search_read_dict(domain, fields + [by_field])
     index = {d.pop(by_field): d for d in fetched_data}
     if len(index) != len(fetched_data):
@@ -468,8 +488,8 @@ def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_
     """
     if id_name != 'id':
         relation = model.fields()[id_name].get('relation')
-        model = model.odoo.get_model(relation, check=True)
-    id_index = False
+        model = model.odoo.get_model(cast(str, relation), check=True)
+    id_index: Optional[int] = None
     ids = set()
     for row_num, row in enumerate(data):
         if isinstance(row, dict):
@@ -478,7 +498,7 @@ def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_
             if row_num == 0:
                 id_index = row.index(id_name)
             else:
-                ids.add(row[id_index])
+                ids.add(row[cast(int, id_index)])
         else:
             raise TypeError('Cannot append the url to %s' % type(row))
     xml_ids = {
@@ -488,7 +508,7 @@ def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_
             ['complete_name', 'res_id'],
         )
     }
-    if id_index is False:
+    if id_index is None:
         # we have dicts
         for row in data:
             row[xml_id_field] = xml_ids.get(row[id_name], False)
@@ -554,7 +574,7 @@ def _flatten(value, field_levels: List[str]) -> Any:
     return False  # default
 
 
-def _expand_many(data: List[Dict]) -> List[Dict]:
+def _expand_many(data: List[Dict]) -> Iterator[Dict]:
     for d in data:
         should_yield = True
         for k, v in d.items():

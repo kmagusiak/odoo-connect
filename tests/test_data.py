@@ -17,7 +17,7 @@ def test_binary_encoding():
 
 
 def test_binary_encoding_empty():
-    assert odoo_data.format_binary(b'') is False
+    assert odoo_data.format_binary(b'') == ''
 
 
 @pytest.mark.parametrize(
@@ -29,7 +29,7 @@ def test_binary_encoding_empty():
         ('date', 'date', "2020-02-02 03:00:00.3", "2020-02-02"),
         ('datetime', 'datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
         ('datetime', 'datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
-        ('binary', 'binary', b'', False),
+        ('binary', 'binary', b'', ''),
         ('char', 'default', '', False),
     ],
 )
