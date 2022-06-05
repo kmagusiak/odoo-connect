@@ -292,9 +292,8 @@ def load_data(
 
     log.info("Load: convert and format data")
     if method_row_type == dict:
-        ddata, dfields = __convert_to_type_dict(data, fields)
-        fields = dfields or []
-        data = [formatter.format_dict(d) for d in ddata]
+        data = __convert_to_type_dict(data, fields)
+        data = [formatter.format_dict(d) for d in data]
     elif method_row_type == list:
         data, fields = __convert_to_type_list(data, fields)
         data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
@@ -303,7 +302,7 @@ def load_data(
 
     log.info("Load data using %s.%s(), %d records", model.model, method, len(data))
     if method == 'load':
-        fields = [f.replace('.', '/') for f in fields]
+        fields = [f.replace('.', '/') for f in cast(List[str], fields)]
         return model.execute(method, fields=fields, data=data)
     if method == 'write':
         return __load_data_write(model, data)
@@ -327,18 +326,16 @@ def __convert_to_type_list(
         logging.getLogger(__name__).debug("Load: using first row as field names")
         fields = first_row
         data = idata
-    if not isinstance(data, list):
-        data = list(data)
-    return list(data), fields
+    elif not isinstance(data, list):
+        data = [first_row] + list(data)
+    return data, fields
 
 
-def __convert_to_type_dict(
-    data: Iterable, fields: Optional[List[str]]
-) -> Tuple[Iterable[Dict], Optional[List[str]]]:
+def __convert_to_type_dict(data: Iterable, fields: Optional[List[str]]) -> Iterable[Dict]:
     idata = iter(data)
     first_row = next(idata, None)
     if first_row is None:
-        return [], fields
+        return []
     if isinstance(first_row, list):
         if fields is None:
             fields = first_row
@@ -350,11 +347,7 @@ def __convert_to_type_dict(
                 data = ({f: d[i] for i, f in enumerate(fields)} for d in data)
     elif not isinstance(data, list):
         data = [first_row] + list(idata)
-    if not isinstance(data, list):
-        data = list(data)
-    if fields is None:
-        fields = list({k for d in data for k in d})
-    return list(data), fields
+    return data
 
 
 def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
