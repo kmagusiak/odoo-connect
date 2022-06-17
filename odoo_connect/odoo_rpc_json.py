@@ -41,7 +41,7 @@ class OdooClientJSON(OdooClientBase):
         resp.raise_for_status()
         if reply.get("error"):
             raise OdooServerError(reply["error"])
-        return reply["result"]
+        return reply.get("result", None)
 
     def _call(self, service, method, *args):
         return self._json_rpc("call", {"service": service, "method": method, "args": args})
