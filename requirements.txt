@@ -4,6 +4,7 @@ setuptools_scm
 black
 flake8
 isort
+mypy
 
 # Testing
 ipython

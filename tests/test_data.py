@@ -8,7 +8,7 @@ import odoo_connect.data as odoo_data
 
 def test_binary_encoding():
     bin = b'OK'
-    value = odoo_data.get_formatter('binary')(bin)
+    value = odoo_data.format_binary(bin)
     assert isinstance(value, str)
     assert len(value) == math.ceil(len(bin) / 3) * 4
 
@@ -17,24 +17,71 @@ def test_binary_encoding():
 
 
 def test_binary_encoding_empty():
-    assert odoo_data.get_formatter('binary')(b'') is False
+    assert odoo_data.format_binary(b'') == ''
 
 
 @pytest.mark.parametrize(
-    "type_name,input,expected",
+    "type_name,func,input,expected",
     [
-        ('char', 'test', 'test'),
-        ('int', 3, 3),
-        ('date', datetime(2020, 2, 2, 3), "2020-02-02"),
-        ('date', "2020-02-02 03:00:00.3", "2020-02-02"),
-        ('datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
-        ('datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
-        ('binary', b'', False),
-        ('char', '', False),
+        ('char', 'default', 'test', 'test'),
+        ('int', 'default', 3, 3),
+        ('date', 'date', datetime(2020, 2, 2, 3), "2020-02-02"),
+        ('date', 'date', "2020-02-02 03:00:00.3", "2020-02-02"),
+        ('datetime', 'datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
+        ('datetime', 'datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
+        ('binary', 'binary', b'', ''),
+        ('char', 'default', '', False),
     ],
 )
-def test_formatter(type_name, input, expected):
-    assert odoo_data.get_formatter(type_name)(input) == expected
+def test_format(type_name, func, input, expected):
+    formatter = getattr(odoo_data, "format_%s" % func)
+    assert formatter(input) == expected, "Couldn't format %s" % type_name
+
+
+def test_formatter():
+    f = odoo_data.Formatter()
+    f['d'] = odoo_data.format_date
+    f.field_map['X'] = 'y'
+    f.field_map['removed'] = ''
+    assert f.map_field('X') == 'y'
+    d = f.format_dict({'d': '2022-01-01 15:10:05', 'X': 'value y', 'def': 'ok ', 'removed': 1})
+    print(d)
+    assert d['d'] == '2022-01-01'
+    assert 'X' not in d and d['y'] == 'value y'
+    assert d['def'] == 'ok'
+    assert 'removed' not in d
+
+
+def test_add_field(odoo_cli, odoo_json_rpc_handler):
+    handler = odoo_json_rpc_handler
+
+    @handler.patch_execute_kw('res.partner', 'read')
+    def read_partner(id, fields=[]):
+        return [{'id': 1, 'name': 'test'}]
+
+    @handler.patch_execute_kw('res.partner', 'search_read')
+    def read_search_partner(domain, fields=[]):
+        print(domain)
+        data = [{'id': 1, 'name': 'test'}]
+        if not fields:
+            return data
+        if 'id' not in fields:
+            fields += 'id'
+        return [{k: v for k, v in d.items() if k in fields} for d in data]
+
+    @handler.patch_execute_kw('res.partner', 'fields_get')
+    def read_fields_partner(allfields=[], attributes=[]):
+        attr = {a: True if a == 'store' else False for a in attributes}
+        return {
+            'id': {**attr, 'type': 'int', 'string': 'ID'},
+            'name': {**attr, 'type': 'char', 'string': 'Name'},
+        }
+
+    model = odoo_cli['res.partner']
+    data = model.read(1, ['name'])
+    id = data[0].pop('id')
+    odoo_data.add_fields(model, data, 'name', ['id'])
+    assert data[0].get('id') == id
 
 
 def test_add_url(odoo_cli):
@@ -53,6 +100,26 @@ def test_add_url_list(odoo_cli):
     odoo_data.add_url(model, data)
     assert 'url' in data[0]
     assert model.model in data[1][1]
+
+
+def test_add_xml_id(odoo_cli, odoo_json_rpc_handler):
+    handler = odoo_json_rpc_handler
+
+    @handler.patch_execute_kw('ir.model.data', 'search_read')
+    def read_search_data(domain, fields=[]):
+        print(domain)
+        data = [{'id': 1, 'res_id': 4, 'model': 'res.partner', 'complete_name': 'test.myid'}]
+        if not fields:
+            return data
+        if 'id' not in fields:
+            fields += 'id'
+        return [{k: v for k, v in d.items() if k in fields} for d in data]
+
+    model = odoo_cli['res.partner']
+    data = [{'id': 4}, {'id': 9}]
+    odoo_data.add_xml_id(model, data)
+    assert 'test.myid' == data[0]['xml_id']
+    assert not data[1]['xml_id']
 
 
 @pytest.mark.parametrize(

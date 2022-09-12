@@ -56,9 +56,15 @@ domains and fields. Note that this doesn't support groupping.
 	data = odoo_data.export_data(so, [('state', '=', 'sale')], ['name', 'partner_id.name'])
 	odoo_data.add_url(so, data)
 
-	# Import data
-	odoo_data.load_data(so, data)  # use Odoo's load()
-	odoo_data.load_data_write(env['res.partner'], [{'name': 'Max'}])  # use create()
+	# Import data using Odoo's load() function
+	odoo_data.load_data(so, data)
+
+	# Import data using writes and creates (or another custom method)
+	for batch in odoo_data.make_batches(data):
+		# add ids by querying the model using the 'name' field
+		odoo_data.add_fields(so, batch, 'name', ['id'])
+		# if you just plan to create(), you can skip adding ids
+		odoo_data.load_data(partner, batch, method='write')
 
 ## Development
 
