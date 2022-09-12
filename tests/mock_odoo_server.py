@@ -5,7 +5,7 @@ import pytest
 from werkzeug.wrappers import Request, Response
 
 
-class OdooMockedException(Exception):
+class OdooMockedError(Exception):
     """Exception not reraised during a mocked rpc call"""
 
     pass
@@ -86,7 +86,7 @@ class OdooRPCHandler:
         except Exception as e:
             status = 500
             output["error"] = str(e)
-            if not isinstance(e, OdooMockedException):
+            if not isinstance(e, OdooMockedError):
                 raise  # don't try to transform errors during testing
         return Response(json.dumps(output), status=status, content_type="application/json")
 
@@ -111,7 +111,7 @@ def default_rpc_handler():
                 return 1
             if username and username == password:
                 return 2
-            raise OdooMockedException('Cannot authenticate on %s with %s' % (database, username))
+            raise OdooMockedError('Cannot authenticate on %s with %s' % (database, username))
 
     @h.patch_execute_kw('res.users', 'read')
     def read_user(id, fields=[]):

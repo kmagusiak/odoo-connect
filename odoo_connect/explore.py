@@ -142,6 +142,10 @@ class Instance:
     def __dir__(self) -> Iterable[str]:
         return self.__fields.__dir__()
 
+    @property
+    def ids(self):
+        return self.__ids
+
     def __getattr__(self, __name: str) -> Any:
         return self.__getitem__(__name)
 
