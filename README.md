@@ -66,6 +66,14 @@ domains and fields. Note that this doesn't support groupping.
 		# if you just plan to create(), you can skip adding ids
 		odoo_data.load_data(partner, batch, method='write')
 
+## Explore
+
+	from odoo_connect.explore import explore
+	sale_order = explore(env['sale.order'])
+	sale_order = sale_order.search([], limit=1)
+	sale_order.read()
+
+
 ## Development
 
 You can use a vscode container and open this repository inside it.

@@ -1,8 +1,16 @@
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, overload
+
+from . import odoo_rpc
 
 
-class Field:
-    def __init__(self, model, *, name=None, parent: "Field" = None):
+class Fields:
+    """Representation of a set of fields in a model accessed through a path"""
+
+    __model: odoo_rpc.OdooModel
+    __name: str
+    __parent: Optional["Fields"]
+
+    def __init__(self, model, *, name=None, parent: "Fields" = None):
         self.__model = model
         self.__name = name
         self.__parent = parent
@@ -18,8 +26,8 @@ class Field:
         if prop:
             relation = prop.get('relation')
             if relation:
-                return Field(self.__model.odoo.get_model(relation), name=__name, parent=self)
-            return Field(self.__model, name=__name, parent=self)
+                return Fields(self.__model.odoo.get_model(relation), name=__name, parent=self)
+            return Fields(self.__model, name=__name, parent=self)
         return None
 
     def _properties(self, full=False):
@@ -63,17 +71,30 @@ class Field:
     def __in__(self, value):
         return self.op('in', value)
 
-    def op(self, op, value):
+    def op(self, op: str, value):
         return Domain(self, op, value)
 
 
 class Domain:
-    def __init__(self, field, op, value) -> None:
+    """Representaiton of a domain"""
+
+    domain: List[Union[str, Tuple[str, str, Any]]]
+
+    @overload
+    def __init__(self, field: Fields, op: str, value) -> None:
+        ...
+
+    @overload
+    def __init__(self, field: "Domain", op: str, value: Optional["Domain"]) -> None:
+        ...
+
+    def __init__(self, field: Union[Fields, "Domain", str], op: str, value) -> None:
         if isinstance(field, Domain):
+            domain: List[Union[str, Tuple[str, str, Any]]] = [op]
+            domain += field.domain
             if value:
-                self.domain = [op] + field.domain + value.domain
-            else:
-                self.domain = [op] + field.domain
+                domain += value.domain
+            self.domain = domain
         else:
             self.domain = [(str(field), op, value)]
 
@@ -93,23 +114,30 @@ class Domain:
         return str(self.domain)
 
 
-GLOBAL_CACHE = {}
+"""Cache of read values"""
+GLOBAL_CACHE: Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]] = {}
 
 
 class Instance:
+    """A proxy for an instance set"""
+
+    __model: odoo_rpc.OdooModel
+    __fields: Fields
+    __ids: List[int]
+
     def __init__(self, model, ids, fields) -> None:
         self.__model = model
-        self.__fields = fields or Field(model)
+        self.__fields = fields or Fields(model)
         self.__ids = ids
 
     @property
-    def fields(self):
+    def fields(self) -> Fields:
         return self.__fields
 
     def __len__(self):
         return len(self.__ids)
 
-    # TODO in
+    # TODO __contains__ (in)
 
     def __dir__(self) -> Iterable[str]:
         return self.__fields.__dir__()
@@ -118,7 +146,7 @@ class Instance:
         return self.__getitem__(__name)
 
     def __getitem__(self, __name: str) -> Any:
-        value = self.mapped(__name, dots=False)
+        value = self._mapped(__name)
         if isinstance(value, list):
             if len(self.__ids) == 1:
                 return value[0]
@@ -127,23 +155,30 @@ class Instance:
             raise Exception('Too many values to unpack: ' + __name)
         return value
 
-    def mapped(self, path: str, *, dots=True):
-        if dots:
-            paths = path.split('.', 1)
-            if len(paths) == 2:
-                value = self.mapped(paths[0], dots=False)
-                return value.mapped(paths[1])
-        field = self.__fields[path]
+    def mapped(self, path: str):
+        """Map/read a field path"""
+        paths = path.split('.', 1)
+        if len(paths) > 1:
+            value = self._mapped(paths[0])
+            if not isinstance(value, Instance):
+                raise Exception(f'{paths[0]} is not a relation')
+            return value.mapped(paths[1])
+        return self._mapped(path)
+
+    def _mapped(self, field_name: str) -> Union["Instance", List[Any]]:
+        """Map/read a field"""
+        field = self.__fields[field_name]
         prop = field._properties()
         if not prop:
-            raise Exception('Invalid field: ' + path)
+            raise Exception(f'Invalid field: {field_name}')
         relation = prop.get('relation')
         if relation:
-            ids = set(i for d in self.read() for i in d[path] or [] if isinstance(i, int))
+            ids = set(i for d in self.read() for i in d[field_name] or [] if isinstance(i, int))
             return Instance(field._model, list(ids), fields=field)
-        return [d[path] for d in self.read()]
+        return [d[field_name] for d in self.read()]
 
-    def read(self):
+    def read(self) -> List[Dict[str, Any]]:
+        """Read the data"""
         model_cache = GLOBAL_CACHE.get(self.__model)
         if not model_cache:
             GLOBAL_CACHE[self.__model] = model_cache = {}
@@ -152,10 +187,12 @@ class Instance:
             model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), [])})
         return [model_cache[i] for i in self.__ids]
 
-    def browse(self, *ids):
+    def browse(self, *ids: List[int]) -> "Instance":
+        """Create an instance with the given ids"""
         return Instance(self.__model, ids, self.__fields)
 
-    def search(self, domain, **kw):
+    def search(self, domain: Union[Domain, List], **kw) -> "Instance":
+        """Search for an instance"""
         if isinstance(domain, Domain):
             domain = domain.domain
         data = {d['id']: d for d in self.__model.search_read(domain, [], **kw)}
@@ -166,6 +203,7 @@ class Instance:
         return self.browse(list(data))
 
     def invalidate_cache(self, ids=None):
+        """Invalidate the cache for a set of ids or all the model"""
         model_cache = GLOBAL_CACHE.get(self.__model)
         if not model_cache:
             return
@@ -179,7 +217,8 @@ class Instance:
         return repr(self.__model) + str(self.__ids)
 
 
-def explore(model):
+def explore(model: odoo_rpc.OdooModel) -> Instance:
+    """Create an empty instance to explore"""
     return Instance(model, [], None)
 
 

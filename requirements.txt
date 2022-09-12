@@ -5,6 +5,7 @@ black
 flake8
 isort
 mypy
+types-requests
 
 # Testing
 ipython
