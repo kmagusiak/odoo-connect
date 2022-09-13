@@ -263,13 +263,16 @@ class OdooModel:
     def __repr__(self) -> str:
         return repr(self.odoo) + "/" + self.model
 
-    def fields(self) -> Dict[str, dict]:
+    def fields(self, extended=False) -> Dict[str, dict]:
         """Returns the fields of the model"""
-        if not self._field_info:
+        if not self._field_info or (extended and not self._field_info['id'].get('name')):
+            attributes = (
+                [] if extended else ['string', 'type', 'readonly', 'required', 'store', 'relation']
+            )
             self._field_info = self.execute(
                 'fields_get',
                 allfields=[],
-                attributes=['string', 'type', 'readonly', 'required', 'store', 'relation'],
+                attributes=attributes,
             )
         return self._field_info  # type: ignore
 
