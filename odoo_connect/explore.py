@@ -1,118 +1,6 @@
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, overload
+from typing import Any, Dict, Iterable, List, Union
 
 from . import odoo_rpc
-
-
-class Fields:
-    """Representation of a set of fields in a model accessed through a path"""
-
-    __model: odoo_rpc.OdooModel
-    __name: str
-    __parent: Optional["Fields"]
-
-    def __init__(self, model, *, name=None, parent: "Fields" = None):
-        self.__model = model
-        self.__name = name
-        self.__parent = parent
-
-    def __dir__(self) -> Iterable[str]:
-        return self.__model.fields().keys()
-
-    def __getattr__(self, __name: str) -> Any:
-        return self.__getitem__(__name)
-
-    def __getitem__(self, __name: str) -> Any:
-        prop = self.__model.fields().get(__name)
-        if prop:
-            relation = prop.get('relation')
-            if relation:
-                return Fields(self.__model.odoo.get_model(relation), name=__name, parent=self)
-            return Fields(self.__model, name=__name, parent=self)
-        return None
-
-    def _properties(self, full=False):
-        if not self.__name:
-            raise Exception('No field selected')
-        return self.__parent.__model.fields(full).get(self.__name)
-
-    @property
-    def _model(self):
-        return self.__model
-
-    def __repr__(self) -> str:
-        return "FieldsOf" + repr(self.__model) + ('/name:' + self.__name if self.__name else '')
-
-    def __str__(self) -> str:
-        if not self.__name:
-            return ''
-        prefix = str(self.__parent or '')
-        return prefix + ('.' if prefix else '') + self.__name
-
-    # Domain builder
-
-    def __eq__(self, value):
-        return self.op('=', value)
-
-    def __ne__(self, value):
-        return self.op('!=', value)
-
-    def __gt__(self, value):
-        return self.op('>', value)
-
-    def __ge__(self, value):
-        return self.op('>=', value)
-
-    def __lt__(self, value):
-        return self.op('<', value)
-
-    def __le__(self, value):
-        return self.op('<=', value)
-
-    def __in__(self, value):
-        return self.op('in', value)
-
-    def op(self, op: str, value):
-        return Domain(self, op, value)
-
-
-class Domain:
-    """Representaiton of a domain"""
-
-    domain: List[Union[str, Tuple[str, str, Any]]]
-
-    @overload
-    def __init__(self, field: Fields, op: str, value) -> None:
-        ...
-
-    @overload
-    def __init__(self, field: "Domain", op: str, value: Optional["Domain"]) -> None:
-        ...
-
-    def __init__(self, field: Union[Fields, "Domain", str], op: str, value) -> None:
-        if isinstance(field, Domain):
-            domain: List[Union[str, Tuple[str, str, Any]]] = [op]
-            domain += field.domain
-            if value:
-                domain += value.domain
-            self.domain = domain
-        else:
-            self.domain = [(str(field), op, value)]
-
-    def __and__(self, other):
-        return Domain(self, '&', other)
-
-    def __or__(self, other):
-        return Domain(self, '|', other)
-
-    def __not__(self):
-        return Domain(self, '!', False)
-
-    def __repr__(self) -> str:
-        return 'Domain:' + str(self.domain)
-
-    def __str__(self) -> str:
-        return str(self.domain)
-
 
 """Cache of read values"""
 GLOBAL_CACHE: Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]] = {}
@@ -122,34 +10,23 @@ class Instance:
     """A proxy for an instance set"""
 
     __model: odoo_rpc.OdooModel
-    __fields: Fields
     __ids: List[int]
 
-    def __init__(self, model, ids, fields) -> None:
+    def __init__(self, model: odoo_rpc.OdooModel, ids: List[int]) -> None:
         self.__model = model
-        self.__fields = fields or Fields(model)
         self.__ids = ids
-
-    @property
-    def fields(self) -> Fields:
-        return self.__fields
 
     def __len__(self):
         return len(self.__ids)
 
-    # TODO __contains__ (in)
-
     def __dir__(self) -> Iterable[str]:
-        return self.__fields.__dir__()
+        return self.__model.fields().keys()
 
     @property
     def ids(self):
         return self.__ids
 
     def __getattr__(self, __name: str) -> Any:
-        return self.__getitem__(__name)
-
-    def __getitem__(self, __name: str) -> Any:
         value = self._mapped(__name)
         if isinstance(value, list):
             if len(self.__ids) == 1:
@@ -158,6 +35,16 @@ class Instance:
                 return False
             raise Exception('Too many values to unpack: ' + __name)
         return value
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        if __name.startswith('_Instance__'):
+            return super().__setattr__(__name, __value)
+        if isinstance(__value, Instance):
+            if len(__value) == 1:
+                __value = __value.__ids[0]
+            else:
+                __value = __value.__ids or False
+        return self.write({__name: __value})
 
     def mapped(self, path: str):
         """Map/read a field path"""
@@ -171,40 +58,70 @@ class Instance:
 
     def _mapped(self, field_name: str) -> Union["Instance", List[Any]]:
         """Map/read a field"""
-        field = self.__fields[field_name]
-        prop = field._properties()
+        prop = self.__model.fields().get(field_name)
         if not prop:
             raise Exception(f'Invalid field: {field_name}')
         relation = prop.get('relation')
         if relation:
+            model = self.__model.odoo.get_model(relation)
             ids = set(i for d in self.read() for i in d[field_name] or [] if isinstance(i, int))
-            return Instance(field._model, list(ids), fields=field)
+            return Instance(model, list(ids))
         return [d[field_name] for d in self.read()]
 
     def read(self) -> List[Dict[str, Any]]:
         """Read the data"""
-        model_cache = GLOBAL_CACHE.get(self.__model)
-        if not model_cache:
-            GLOBAL_CACHE[self.__model] = model_cache = {}
+        model_cache = self.__cache()
         missing_ids = set(self.__ids) - model_cache.keys()
         if missing_ids:
             model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), [])})
         return [model_cache[i] for i in self.__ids]
 
-    def browse(self, *ids: List[int]) -> "Instance":
+    def browse(self, *ids: int) -> "Instance":
         """Create an instance with the given ids"""
-        return Instance(self.__model, ids, self.__fields)
+        return Instance(self.__model, list(ids))
 
-    def search(self, domain: Union[Domain, List], **kw) -> "Instance":
+    def exists(self) -> "Instance":
+        """Return only existing records"""
+        # re-read records to validate
+        self.invalidate_cache(self.__ids)
+        self.read()
+        model_cache = self.__cache()
+        ids = set(self.__ids) & model_cache.keys()
+        return self.browse(*ids) if len(ids) < len(self.__ids) else self
+
+    def search(self, domain: List, **kw) -> "Instance":
         """Search for an instance"""
-        if isinstance(domain, Domain):
-            domain = domain.domain
-        data = {d['id']: d for d in self.__model.search_read(domain, [], **kw)}
+        data = self.__model.search_read(domain, [], **kw)
+        model_cache = self.__cache()
+        model_cache.update({d['id']: d for d in data})
+        return Instance(self.__model, [d['id'] for d in data])
+
+    def name_search(self, name: str, **kw) -> "Instance":
+        """Search by name"""
+        # search and return only the ids
+        data = self.__model.name_search(name, **kw)
+        return Instance(self.__model, [d[0] for d in data])
+
+    def create(self, *values: Dict[str, Any]) -> "Instance":
+        """Create multiple instances"""
+        if not values:
+            return self.browse()
+        ids = self.__model.create(list(values))
+        return self.browse(*ids)
+
+    def write(self, values: Dict[str, Any]):
+        """Update the values of the current instance"""
+        if not values:
+            return
+        self.__model.write(self.__ids, values)
+        self.invalidate_cache(self.__ids)
+        print('write', self, values)
+
+    def __cache(self) -> Dict[int, Dict[str, Any]]:
         model_cache = GLOBAL_CACHE.get(self.__model)
         if not model_cache:
             GLOBAL_CACHE[self.__model] = model_cache = {}
-        model_cache.update(data)
-        return self.browse(list(data))
+        return model_cache
 
     def invalidate_cache(self, ids=None):
         """Invalidate the cache for a set of ids or all the model"""
@@ -215,7 +132,7 @@ class Instance:
             model_cache.clear()
         else:
             for id in ids:
-                model_cache.pop(id, default=None)
+                model_cache.pop(id, None)
 
     def __repr__(self) -> str:
         return repr(self.__model) + str(self.__ids)
@@ -223,7 +140,7 @@ class Instance:
 
 def explore(model: odoo_rpc.OdooModel) -> Instance:
     """Create an empty instance to explore"""
-    return Instance(model, [], None)
+    return Instance(model, [])
 
 
 __all__ = ['explore']
