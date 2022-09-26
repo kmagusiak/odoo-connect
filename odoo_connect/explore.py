@@ -26,6 +26,12 @@ class Instance:
     def ids(self):
         return self.__ids
 
+    def __getitem__(self, item) -> "Instance":
+        ids = self.__ids[item]
+        if not isinstance(ids, Iterable):
+            ids = [ids]
+        return Instance(self.__model, ids)
+
     def __getattr__(self, __name: str) -> Any:
         value = self._mapped(__name)
         if isinstance(value, list):
@@ -40,10 +46,19 @@ class Instance:
         if __name.startswith('_Instance__'):
             return super().__setattr__(__name, __value)
         if isinstance(__value, Instance):
-            if len(__value) == 1:
-                __value = __value.__ids[0]
+            prop = self.__model.fields().get(__name) or {}
+            if '2many' in (prop.get('type') or ''):
+                if len(__value) == 0:
+                    __value = [(5, 0, 0)]  # remove all
+                else:
+                    __value = [(6, 0, __value.ids)]  # replace all
             else:
-                __value = __value.__ids or False
+                if len(__value) > 1:
+                    raise ValueError('Cannot assign multiple values')
+                if len(__value) == 1:
+                    __value = __value.ids[0]
+                else:
+                    __value = False
         return self.write({__name: __value})
 
     def mapped(self, path: str):
@@ -61,20 +76,30 @@ class Instance:
         prop = self.__model.fields().get(field_name)
         if not prop:
             raise Exception(f'Invalid field: {field_name}')
+        values = [d[field_name] for d in self.read(check_field=field_name)]
         relation = prop.get('relation')
         if relation:
             model = self.__model.odoo.get_model(relation)
-            ids = set(i for d in self.read() for i in d[field_name] or [] if isinstance(i, int))
+            ids = set(i for v in values for i in v or [] if isinstance(i, int) and i)
             return Instance(model, list(ids))
-        return [d[field_name] for d in self.read()]
+        return values
 
-    def read(self) -> List[Dict[str, Any]]:
+    def read(self, *, check_field=None) -> List[Dict[str, Any]]:
         """Read the data"""
+        fields = self._default_fields()
         model_cache = self.__cache()
         missing_ids = set(self.__ids) - model_cache.keys()
         if missing_ids:
-            model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), [])})
+            model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), fields)})
+        if isinstance(check_field, str) and check_field not in fields:
+            missing_ids = set(i for i in self.__ids if check_field not in model_cache[i])
+            for d in self.__model.read(list(missing_ids), [check_field]) if missing_ids else []:
+                model_cache[d['id']][check_field] = d[check_field]
         return [model_cache[i] for i in self.__ids]
+
+    def _default_fields(self):
+        data = self.__model.fields()
+        return [f for f, prop in data.items() if '2many' not in (prop.get('type') or '')]
 
     def browse(self, *ids: int) -> "Instance":
         """Create an instance with the given ids"""
@@ -91,7 +116,8 @@ class Instance:
 
     def search(self, domain: List, **kw) -> "Instance":
         """Search for an instance"""
-        data = self.__model.search_read(domain, [], **kw)
+        fields = self._default_fields()
+        data = self.__model.search_read(domain, fields, **kw)
         model_cache = self.__cache()
         model_cache.update({d['id']: d for d in data})
         return Instance(self.__model, [d['id'] for d in data])
@@ -115,7 +141,6 @@ class Instance:
             return
         self.__model.write(self.__ids, values)
         self.invalidate_cache(self.__ids)
-        print('write', self, values)
 
     def __cache(self) -> Dict[int, Dict[str, Any]]:
         model_cache = GLOBAL_CACHE.get(self.__model)
