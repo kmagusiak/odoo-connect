@@ -106,7 +106,8 @@ def list_attachments(
 
     We search all attachments linked to the model and ids.
     All attachments, no matter if they have a res_field or not are read.
-    We read the id, name, res_field.
+    We read the id, name, res_id, res_field.
+    Special field names: public_url (generate public URL), datas (contents).
 
     :param model: The model
     :param ids: The record ids to filter on
@@ -115,9 +116,12 @@ def list_attachments(
     :param generate_access_token: Generate access token for the found documents
     :return: List of read properties from the attachments (id, name, res_field, ...)
     """
-    full_url = 'full_url' in fields
-    if full_url:
-        fields = list({*fields, 'website_url', 'public', 'access_token'} - {'full_url'})
+    url_field = None
+    if 'public_url' in fields:
+        url_field = 'public_url'
+        fields += ['website_url', 'url', 'public', 'access_token']
+    fields = list({'id', 'name', 'res_id', 'res_field', *fields} - {url_field})
+    # Get the data
     attachments = model.odoo['ir.attachment']
     data = attachments.search_read(
         [
@@ -126,16 +130,22 @@ def list_attachments(
             ('id', '!=', 0),  # to get all res_field
         ]
         + domain,
-        ['id', 'name', 'res_field'] + fields,
+        fields,
     )
+    # Get contents
+    if 'datas' in fields:
+        for d in data:
+            d['datas'] = decode_bytes(d['datas']) if d['datas'] else False
+    # Generate access tokens
     if generate_access_token and data:
-        tokens = attachments.execute('generate_access_tokens', [d['id'] for d in data])
+        tokens = attachments.execute('generate_access_token', [d['id'] for d in data])
         for d, token in zip(data, tokens):
             d['access_token'] = token
-    if full_url:
+    # Compute a full url (false when not accessible)
+    if url_field:
 
         def attachment_url(d, _model_name, _id):
-            url = d.get('website_url')
+            url = d.get('url') or d.get('website_url')
             if url and d.get('public'):
                 return url
             if url and d.get('access_token'):
@@ -143,14 +153,14 @@ def list_attachments(
                 return url
             return False
 
-        add_url(attachments, data, url_field='full_url', build_url=attachment_url)
+        add_url(attachments, data, url_field=url_field, build_url=attachment_url)
     return data
 
 
 def _download_content(
     odoo: OdooClientBase, url: str, *, params: Dict = {}, access_token: Optional[str] = None
 ) -> bytes:
-
+    """Download contents from a URL"""
     # In the implementation, the session is authenticated.
     session = getattr(odoo, 'session', None)
     if not session:
@@ -172,7 +182,7 @@ def download_content(
     *,
     access_token: Optional[str] = None,
 ) -> bytes:
-    """Get attachment from a field in an object by id"""
+    """Download contents from /web"""
     if field_name:
         url = f"/web/content/{model.model}/{id}/{field_name}"
     else:
@@ -188,6 +198,7 @@ def download_image(
     dimensions=None,
     access_token: Optional[str] = None,
 ):
+    """Download an image from /web"""
     if field_name:
         url = f"/web/image/{model.model}/{id}/{field_name}"
     else:
