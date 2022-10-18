@@ -26,6 +26,10 @@ class Instance:
     def ids(self):
         return self.__ids
 
+    @property
+    def _model(self):
+        return self.__model
+
     def __getitem__(self, item) -> "Instance":
         ids = self.__ids[item]
         if not isinstance(ids, Iterable):
@@ -99,7 +103,18 @@ class Instance:
 
     def _default_fields(self):
         data = self.__model.fields()
-        return [f for f, prop in data.items() if '2many' not in (prop.get('type') or '')]
+        return [
+            f
+            for f, prop in data.items()
+            if '2many' not in (prop.get('type') or '') and prop.get('type') != 'binary'
+        ]
+
+    def fields_get(self, field_names=[]) -> Dict[str, Dict]:
+        """Get the field information"""
+        data = self.__model.fields()
+        if field_names:
+            data = {k: v for k, v in data.items() if k in field_names}
+        return data
 
     def browse(self, *ids: int) -> "Instance":
         """Create an instance with the given ids"""
@@ -158,6 +173,25 @@ class Instance:
         else:
             for id in ids:
                 model_cache.pop(id, None)
+
+    def get_attachments(self) -> "Instance":
+        """Return ir.attachment linked to this instance"""
+        return explore(self.__model.odoo['ir.attachment']).search(
+            [
+                ('res_model', '=', self.__model.model),
+                ('res_id', 'in', self.__ids),
+                ('id', '!=', 0),  # to get all res_field
+            ]
+        )
+
+    def _call(self, method, *args, model_method=False, **kw):
+        """Call a method on the model
+
+        :param model_method: Whether to don't pass ids
+        """
+        if model_method:
+            return self.__model.execute(method, *args, **kw)
+        return self.__model.execute(method, self.ids, *args, **kw)
 
     def __repr__(self) -> str:
         return repr(self.__model) + str(self.__ids)

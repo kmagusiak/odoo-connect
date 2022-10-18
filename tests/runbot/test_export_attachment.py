@@ -24,5 +24,4 @@ def test_get_attachment_bytes(odoo_session):
 
 def test_get_attachments(odoo_session):
     values = odoo_data.get_attachments(odoo_session, [1, 2])
-    assert len(values) == 2
-    assert all(isinstance(name, str) and isinstance(raw, bytes) for name, raw in values)
+    assert isinstance(values, dict) and values
