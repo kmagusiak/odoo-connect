@@ -1,9 +1,9 @@
 import odoo_connect.data as odoo_data
 
 
-def test_get_reports(odoo_session):
+def test_list_reports(odoo_session):
     model = odoo_session['account.move']
-    reports = odoo_data.get_reports(model)
+    reports = odoo_data.list_reports(model)
     assert all(d.get('report_name') for d in reports)
 
 

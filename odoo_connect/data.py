@@ -61,49 +61,148 @@ def get_attachment(
         return decode_bytes(encoded_value)
     if not id:
         return b''
+    # we read an attachment by id
+    if not field_name:
+        return get_attachments(model.odoo, [id])[id]
     # if we have a field name, decode the value or get the ID
-    if field_name:
-        field_info = model.fields().get(field_name, {})
-        record = model.read(id, [field_name])
-        value = record[0][field_name]
-        if field_info.get("relation") == "ir.attachment":
-            if field_info.get("type") != "many2one":
-                raise RuntimeError(
-                    "Field %s is not a many2one, here are the values: %s" % (field_name, value)
-                )
-            if not value:
-                return b''
-            value = value[0]
-        elif field_info.get("type") != "binary":
-            raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
-        if isinstance(value, int):
-            return get_attachment(model, value)
-        return decode_bytes(value)
-    # read the attachment
-    return get_attachments(model.odoo, [id])[0][1]
+    field_info = model.fields().get(field_name, {})
+    record = model.read(id, [field_name])
+    value = record[0][field_name]
+    if field_info.get("relation") == "ir.attachment":
+        if field_info.get("type") != "many2one":
+            raise RuntimeError(
+                "Field %s is not a many2one, here are the values: %s" % (field_name, value)
+            )
+        if not value:
+            return b''
+        value = value[0]
+    elif field_info.get("type") != "binary":
+        raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
+    if isinstance(value, int):
+        return get_attachment(model, value)
+    return decode_bytes(value)
 
 
 def decode_bytes(value) -> bytes:
+    """Decode bytes from a b64"""
     return base64.b64decode(value)
 
 
-def get_attachments(odoo: OdooClientBase, ids: List[int]) -> List[Tuple[str, bytes]]:
+def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
     """Get a list of tuples (name, raw_bytes) from ir.attachment by ids
 
     :param odoo: Odoo client
     :param ids: List of ids of attachments
-    :return: List of tuples (name, raw_bytes)
+    :return: Dict id -> raw_bytes
     """
-    data = odoo['ir.attachment'].read(ids, ['name', 'datas'])
-    return [(r['name'], decode_bytes(r['datas'])) for r in data]
+    data = odoo['ir.attachment'].read(ids, ['datas'])
+    return {r['id']: decode_bytes(r['datas']) for r in data}
+
+
+def list_attachments(
+    model: OdooModel, ids: List[int], *, domain=[], fields=[], generate_access_token=False
+) -> List[Dict]:
+    """List attachments
+
+    We search all attachments linked to the model and ids.
+    All attachments, no matter if they have a res_field or not are read.
+    We read the id, name, res_field.
+
+    :param model: The model
+    :param ids: The record ids to filter on
+    :param domain: Additional domain
+    :param fields: Additional fields to read
+    :param generate_access_token: Generate access token for the found documents
+    :return: List of read properties from the attachments (id, name, res_field, ...)
+    """
+    full_url = 'full_url' in fields
+    if full_url:
+        fields = list({*fields, 'website_url', 'public', 'access_token'} - {'full_url'})
+    attachments = model.odoo['ir.attachment']
+    data = attachments.search_read(
+        [
+            ('res_model', '=', model.model),
+            ('res_id', 'in', ids),
+            ('id', '!=', 0),  # to get all res_field
+        ]
+        + domain,
+        ['id', 'name', 'res_field'] + fields,
+    )
+    if generate_access_token and data:
+        tokens = attachments.execute('generate_access_tokens', [d['id'] for d in data])
+        for d, token in zip(data, tokens):
+            d['access_token'] = token
+    if full_url:
+
+        def attachment_url(d, _model_name, _id):
+            url = d.get('website_url')
+            if url and d.get('public'):
+                return url
+            if url and d.get('access_token'):
+                url += ('&' if '?' in url else '?') + 'access_token=' + d.get('access_token')
+                return url
+            return False
+
+        add_url(attachments, data, url_field='full_url', build_url=attachment_url)
+    return data
+
+
+def _download_content(
+    odoo: OdooClientBase, url: str, *, params: Dict = {}, access_token: Optional[str] = None
+) -> bytes:
+
+    # In the implementation, the session is authenticated.
+    session = getattr(odoo, 'session', None)
+    if not session:
+        raise RuntimeError('Odoo client must have a session to download contents')
+
+    url = urljoin(odoo.url, url)
+    params = {}
+    if access_token:
+        params = {**params, 'access_token': access_token}
+    req = session.get(url, params=params)
+    req.raise_for_status()
+    return req.content
+
+
+def download_content(
+    model: OdooModel,
+    id: int,
+    field_name: Optional[str] = None,
+    *,
+    access_token: Optional[str] = None,
+) -> bytes:
+    """Get attachment from a field in an object by id"""
+    if field_name:
+        url = f"/web/content/{model.model}/{id}/{field_name}"
+    else:
+        url = f"/web/content/{id}"
+    return _download_content(model.odoo, url, access_token=access_token)
+
+
+def download_image(
+    model: OdooModel,
+    id: int,
+    field_name: Optional[str] = None,
+    *,
+    dimensions=None,
+    access_token: Optional[str] = None,
+):
+    if field_name:
+        url = f"/web/image/{model.model}/{id}/{field_name}"
+    else:
+        url = f"/web/image/{id}"
+    if dimensions:
+        url += "/%dx%d" % dimensions
+    return _download_content(model.odoo, url, access_token=access_token)
 
 
 #######################################
 # REPORTS
 
 
-def get_reports(model: OdooModel) -> List[Dict]:
-    """Get a list of reports from a model"""
+def list_reports(model: OdooModel) -> List[Dict]:
+    """List of reports from a model"""
     return model.odoo['ir.actions.report'].search_read(
         [('model', '=', model.model)], ['name', 'report_type', 'report_name']
     )
@@ -118,20 +217,12 @@ def get_report(model: OdooModel, report_name: str, id: int, converter='pdf') -> 
     :param converter: The output type (default: pdf)
     :return: Bytes of the report
     """
-    from .odoo_rpc_json import OdooClientJSON, urljoin
-
     # We need to use the session, because there is no public API since v14 to
     # render a report and get the bytes.
-    # In the implementation, the session is authenticated.
-    if not isinstance(model.odoo, OdooClientJSON):
-        raise RuntimeError('Can get the report only using OdooClientJSON')
-
     if converter.startswith('qweb-'):
         converter = converter[5:]
-    url = urljoin(model.odoo.url, f"/report/{converter}/{report_name}/{id}")
-    req = model.odoo.session.get(url)
-    req.raise_for_status()
-    return req.content
+    url = f"/report/{converter}/{report_name}/{id}"
+    return _download_content(model.odoo, url)
 
 
 #######################################
@@ -514,13 +605,21 @@ def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_
                 row.append(xml_ids.get(row[id_index], False))
 
 
-def add_url(model: OdooModel, data: List, *, model_id_func=None, url_field='url'):
+def add_url(
+    model: OdooModel,
+    data: List,
+    *,
+    url_field='url',
+    model_id_func=None,
+    build_url=lambda _r, model_name, id: f"/web#model={model_name}&id={id}",
+):
     """Add an URL field to data
 
     :param model: The model
     :param data: The list of dicts or rows (list to append to)
-    :param model_id_func: The function to get a tuple (model_name, id)
     :param url_field: The name of the URL field (default: 'url')
+    :param model_id_func: The function to get a tuple (model_name, id)
+    :param build_url: Function to build the URL (record, model_name, id) -> "/web..."
     """
     base_url = model.odoo.url
     if not model_id_func and data:
@@ -530,14 +629,16 @@ def add_url(model: OdooModel, data: List, *, model_id_func=None, url_field='url'
             model_id_func = lambda d: (model.model, d['id'])  # noqa: E731
     for row_num, row in enumerate(data):
         model_name, id = model_id_func(row)
-        url = f"/web#model={model_name}&id={id}"
+        url = build_url(row, model_name, id)
+        if url:
+            url = urljoin(base_url, url)
         if isinstance(row, dict):
-            row[url_field] = urljoin(base_url, url.format(id=id))
+            row[url_field] = url
         elif isinstance(row, list):
             if row_num == 0:
                 row.append(url_field)
             else:
-                row.append(urljoin(base_url, url.format(id=id)))
+                row.append(url)
         else:
             raise TypeError('Cannot append the url to %s' % type(row))
 
@@ -595,8 +696,9 @@ def flatten(data: List[Dict], fields: List[str], expand_many=False) -> List[List
 __all__ = [
     'get_attachment',
     'get_attachments',
+    'list_attachments',
     'get_report',
-    'get_reports',
+    'list_reports',
     'Formatter',
     'make_batches',
     'load_data',
