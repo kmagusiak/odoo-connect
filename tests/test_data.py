@@ -1,55 +1,6 @@
-import math
-from datetime import datetime
-
 import pytest
 
 import odoo_connect.data as odoo_data
-
-
-def test_binary_encoding():
-    bin = b'OK'
-    value = odoo_data.format_binary(bin)
-    assert isinstance(value, str)
-    assert len(value) == math.ceil(len(bin) / 3) * 4
-
-    original = odoo_data.decode_bytes(value)
-    assert isinstance(original, bytes) and original == bin
-
-
-def test_binary_encoding_empty():
-    assert odoo_data.format_binary(b'') == ''
-
-
-@pytest.mark.parametrize(
-    "type_name,func,input,expected",
-    [
-        ('char', 'default', 'test', 'test'),
-        ('int', 'default', 3, 3),
-        ('date', 'date', datetime(2020, 2, 2, 3), "2020-02-02"),
-        ('date', 'date', "2020-02-02 03:00:00.3", "2020-02-02"),
-        ('datetime', 'datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
-        ('datetime', 'datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
-        ('binary', 'binary', b'', ''),
-        ('char', 'default', '', False),
-    ],
-)
-def test_format(type_name, func, input, expected):
-    formatter = getattr(odoo_data, "format_%s" % func)
-    assert formatter(input) == expected, "Couldn't format %s" % type_name
-
-
-def test_formatter():
-    f = odoo_data.Formatter()
-    f['d'] = odoo_data.format_date
-    f.field_map['X'] = 'y'
-    f.field_map['removed'] = ''
-    assert f.map_field('X') == 'y'
-    d = f.format_dict({'d': '2022-01-01 15:10:05', 'X': 'value y', 'def': 'ok ', 'removed': 1})
-    print(d)
-    assert d['d'] == '2022-01-01'
-    assert 'X' not in d and d['y'] == 'value y'
-    assert d['def'] == 'ok'
-    assert 'removed' not in d
 
 
 def test_add_field(odoo_cli, odoo_json_rpc_handler):

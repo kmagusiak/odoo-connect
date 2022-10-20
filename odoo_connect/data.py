@@ -1,9 +1,8 @@
-import base64
 import json
 import logging
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, overload
 
-from .format import Formatter
+from .format import Formatter, decode_binary
 from .odoo_rpc import OdooClientBase, OdooModel, urljoin
 
 __doc__ = """
@@ -49,7 +48,7 @@ def get_attachment(
     model: OdooModel, id: int = 0, field_name: str = None, encoded_value: str = None
 ) -> bytes:
     if encoded_value is not None:
-        return decode_bytes(encoded_value)
+        return decode_binary(encoded_value)
     if not id:
         return b''
     # we read an attachment by id
@@ -71,12 +70,7 @@ def get_attachment(
         raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
     if isinstance(value, int):
         return get_attachment(model, value)
-    return decode_bytes(value)
-
-
-def decode_bytes(value) -> bytes:
-    """Decode bytes from a b64"""
-    return base64.b64decode(value)
+    return decode_binary(value)
 
 
 def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
@@ -87,7 +81,7 @@ def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
     :return: Dict id -> raw_bytes
     """
     data = odoo['ir.attachment'].read(ids, ['datas'])
-    return {r['id']: decode_bytes(r['datas']) for r in data}
+    return {r['id']: decode_binary(r['datas']) for r in data}
 
 
 def list_attachments(
@@ -126,7 +120,7 @@ def list_attachments(
     # Get contents
     if 'datas' in fields:
         for d in data:
-            d['datas'] = decode_bytes(d['datas']) if d['datas'] else False
+            d['datas'] = decode_binary(d['datas']) if d['datas'] else False
     # Generate access tokens
     if generate_access_token and data:
         tokens = attachments.execute('generate_access_token', [d['id'] for d in data])
