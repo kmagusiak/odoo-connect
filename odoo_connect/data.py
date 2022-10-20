@@ -303,7 +303,7 @@ def load_data(
         data = [formatter.format_dict(d) for d in data]
     elif method_row_type == list:
         data, fields = __convert_to_type_list(data, fields)
-        data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
+        data = [[formatter.format_function[fields[i]](v) for i, v in enumerate(d)] for d in data]
     else:
         raise Exception('Unsupported method row type: %s' % method_row_type)
 
