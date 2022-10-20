@@ -18,6 +18,9 @@ NOT_FORMATTED_FIELDS = {
     '__last_update',
 }
 
+"""Default formatters for models"""
+DEFAULT_FORMATTERS: Dict[OdooModel, "Formatter"] = {}
+
 
 def decode_default(value) -> Any:
     """Decode a value from Odoo (identity function)"""
@@ -138,3 +141,11 @@ class Formatter:
     def decode_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
         """Apply decoding to each field"""
         return {f: self.decode_function[f](v) for f, v in d.items()}
+
+
+def get_default_formatter(model: OdooModel) -> Formatter:
+    """Get the default dict formatter function"""
+    formatter = DEFAULT_FORMATTERS.get(model)
+    if not formatter:
+        DEFAULT_FORMATTERS[model] = formatter = Formatter(model)
+    return formatter

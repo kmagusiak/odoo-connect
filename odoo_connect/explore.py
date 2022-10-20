@@ -1,5 +1,7 @@
 from typing import Any, Dict, Iterable, List, Union
 
+import odoo_connect.format
+
 from . import odoo_rpc
 
 """Cache of read values"""
@@ -23,12 +25,15 @@ class Instance:
         return self.__model.fields().keys()
 
     @property
-    def ids(self):
+    def ids(self) -> List[int]:
         return self.__ids
 
     @property
-    def _model(self):
+    def _model(self) -> odoo_rpc.OdooModel:
         return self.__model
+
+    def _formatter(self) -> odoo_connect.format.Formatter:
+        return odoo_connect.format.get_default_formatter(self._model)
 
     def __getitem__(self, item) -> "Instance":
         ids = self.__ids[item]
@@ -40,7 +45,8 @@ class Instance:
         value = self._mapped(__name)
         if isinstance(value, list):
             if len(self.__ids) == 1:
-                return value[0]
+                # decode the value get getting the attribute
+                return self._formatter().decode_function[__name](value[0])
             if len(self.__ids) == 0:
                 return False
             raise Exception('Too many values to unpack: ' + __name)
@@ -49,7 +55,9 @@ class Instance:
     def __setattr__(self, __name: str, __value: Any) -> None:
         if __name.startswith('_Instance__'):
             return super().__setattr__(__name, __value)
+        format = True
         if isinstance(__value, Instance):
+            format = False
             prop = self.__model.fields().get(__name) or {}
             if '2many' in (prop.get('type') or ''):
                 if len(__value) == 0:
@@ -63,7 +71,8 @@ class Instance:
                     __value = __value.ids[0]
                 else:
                     __value = False
-        return self.write({__name: __value})
+        # format the value when writing a scalar
+        return self.write({__name: __value}, format=format)
 
     def mapped(self, path: str):
         """Map/read a field path"""
@@ -143,17 +152,24 @@ class Instance:
         data = self.__model.name_search(name, **kw)
         return Instance(self.__model, [d[0] for d in data])
 
-    def create(self, *values: Dict[str, Any]) -> "Instance":
+    def create(self, *values: Dict[str, Any], format: bool = False) -> "Instance":
         """Create multiple instances"""
         if not values:
             return self.browse()
-        ids = self.__model.create(list(values))
+        if format:
+            formatter = self._formatter().format_dict
+            value_list = [formatter(d) for d in values]
+        else:
+            value_list = list(values)
+        ids = self.__model.create(value_list)
         return self.browse(*ids)
 
-    def write(self, values: Dict[str, Any]):
+    def write(self, values: Dict[str, Any], format: bool = False):
         """Update the values of the current instance"""
         if not values:
             return
+        if format:
+            values = self._formatter().format_dict(values)
         self.__model.write(self.__ids, values)
         self.invalidate_cache(self.__ids)
 
