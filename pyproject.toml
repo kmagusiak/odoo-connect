@@ -13,7 +13,7 @@ description = "Simple RPC client for Odoo"
 readme = "README.md"
 keywords = ["odoo", "rpc"]
 license = {text = "GNU Lesser General Public License v3 (LGPLv3)"}
-requires-python = ">=3.6"
+requires-python = ">=3.7"
 classifiers = [
     # https://pypi.org/pypi?%3Aaction=list_classifiers
     "Development Status :: 3 - Alpha",

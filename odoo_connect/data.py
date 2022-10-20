@@ -1,10 +1,8 @@
-import base64
 import json
 import logging
-from collections import defaultdict
-from datetime import date, datetime
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, overload
 
+from .format import Formatter, decode_binary
 from .odoo_rpc import OdooClientBase, OdooModel, urljoin
 
 __doc__ = """
@@ -23,14 +21,6 @@ Get attachments and read binary values.
 Generate a report.
 """
 
-NOT_FORMATTED_FIELDS = {
-    'display_name',
-    'write_date',
-    'create_date',
-    'write_uid',
-    'create_uid',
-    '__last_update',
-}
 
 #######################################
 # ATTACHMENTS
@@ -58,7 +48,7 @@ def get_attachment(
     model: OdooModel, id: int = 0, field_name: str = None, encoded_value: str = None
 ) -> bytes:
     if encoded_value is not None:
-        return decode_bytes(encoded_value)
+        return decode_binary(encoded_value)
     if not id:
         return b''
     # we read an attachment by id
@@ -80,12 +70,7 @@ def get_attachment(
         raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
     if isinstance(value, int):
         return get_attachment(model, value)
-    return decode_bytes(value)
-
-
-def decode_bytes(value) -> bytes:
-    """Decode bytes from a b64"""
-    return base64.b64decode(value)
+    return decode_binary(value)
 
 
 def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
@@ -96,7 +81,7 @@ def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
     :return: Dict id -> raw_bytes
     """
     data = odoo['ir.attachment'].read(ids, ['datas'])
-    return {r['id']: decode_bytes(r['datas']) for r in data}
+    return {r['id']: decode_binary(r['datas']) for r in data}
 
 
 def list_attachments(
@@ -135,7 +120,7 @@ def list_attachments(
     # Get contents
     if 'datas' in fields:
         for d in data:
-            d['datas'] = decode_bytes(d['datas']) if d['datas'] else False
+            d['datas'] = decode_binary(d['datas']) if d['datas'] else False
     # Generate access tokens
     if generate_access_token and data:
         tokens = attachments.execute('generate_access_token', [d['id'] for d in data])
@@ -240,86 +225,6 @@ def get_report(model: OdooModel, report_name: str, id: int, converter='pdf') -> 
 # IMPORT AND EXPORT
 
 
-def format_default(v: Any):
-    """Format a value for Odoo"""
-    if isinstance(v, str):
-        v = v.strip()
-    return v or False
-
-
-def format_datetime(v: Union[datetime, str]):
-    """Format a datetime to insert into Odoo"""
-    if isinstance(v, datetime):
-        # format ISO with a space an ignore millisenconds
-        return v.isoformat(sep=" ", timespec='seconds')
-    if isinstance(v, str):
-        return v.strip()[:19] or False
-    return False
-
-
-def format_date(v: Union[datetime, date, str]):
-    """Format a date to insert into Odoo"""
-    if isinstance(v, datetime):
-        v = v.date()
-    if isinstance(v, date):
-        return v.isoformat()
-    if isinstance(v, str):
-        return v.strip()[:10] or False
-    return v
-
-
-def format_binary(v: Union[bytes, str]) -> str:
-    """Format bytes to insert into Odoo (as base64)"""
-    if isinstance(v, str):
-        v = bytes(v, 'utf-8')
-    encoded = base64.b64encode(v)
-    return str(encoded, 'ascii')
-
-
-class Formatter(defaultdict):
-    """Format fields into a format expected by Odoo."""
-
-    """Transformations to apply to source fields.
-    Use an empty string to mask some of them."""
-    field_map: Dict[str, str]
-
-    def __init__(self, model: OdooModel = None, *, lower_case_fields: bool = False):
-        """New formatter
-
-        :param model: The model for which the formatter is generated (initializes formatters)
-        :param lower_case_fields: Whether to transform source fields into lower-case
-        """
-        super().__init__(lambda: format_default)
-        self.model = model
-        self.lower_case_fields = lower_case_fields
-        self.field_map = {}
-
-        # set the formats from the model
-        if model:
-            formatters = {
-                'datetime': format_datetime,
-                'date': format_date,
-                'binary': format_binary,
-                'image': format_binary,
-            }
-            for field, info in model.fields().items():
-                formatter = formatters.get(cast(str, info.get('type')), format_default)
-                if formatter is not format_default:
-                    self.setdefault(field, formatter)
-
-    def map_field(self, name):
-        """Transform a source field name into model's name"""
-        name = self.field_map.get(name, name)
-        if self.lower_case_fields:
-            name = name.lower()
-        return name
-
-    def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply formatting to each field"""
-        d_renamed = [(self.map_field(f), v) for f, v in d.items()]
-        return {f: self[f](v) for f, v in d_renamed if f and f not in NOT_FORMATTED_FIELDS}
-
-
 def make_batches(
     data: Iterable[Dict], *, batch_size: int = 1000, group_by: str = None
 ) -> Iterable[List[Dict]]:
@@ -398,7 +303,7 @@ def load_data(
         data = [formatter.format_dict(d) for d in data]
     elif method_row_type == list:
         data, fields = __convert_to_type_list(data, fields)
-        data = [[formatter[fields[i]](v) for i, v in enumerate(d)] for d in data]
+        data = [[formatter.format_function[fields[i]](v) for i, v in enumerate(d)] for d in data]
     else:
         raise Exception('Unsupported method row type: %s' % method_row_type)
 

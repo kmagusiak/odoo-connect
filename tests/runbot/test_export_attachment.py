@@ -1,4 +1,5 @@
 import odoo_connect.data as odoo_data
+from odoo_connect.format import format_binary
 
 
 def test_get_attachment(odoo_session):
@@ -16,9 +17,7 @@ def test_get_attachment_field(odoo_session):
 
 def test_get_attachment_bytes(odoo_session):
     bin = bytes("hello", 'ascii')
-    value = odoo_data.get_attachment(
-        odoo_session['res.partner'], encoded_value=odoo_data.format_binary(bin)
-    )
+    value = odoo_data.get_attachment(odoo_session['res.partner'], encoded_value=format_binary(bin))
     assert bin == value
 
 
