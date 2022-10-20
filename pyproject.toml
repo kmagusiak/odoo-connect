@@ -1,10 +1,36 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=61",
     "setuptools-scm>=6",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "odoo-connect"
+dynamic = ["version"]
+description = "Simple RPC client for Odoo"
+readme = "README.md"
+keywords = ["odoo", "rpc"]
+license = {text = "MIT"}
+requires-python = ">=3.6"
+classifiers = [
+    # https://pypi.org/pypi?%3Aaction=list_classifiers
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Framework :: Odoo",
+]
+dependencies = [
+    "requests",
+]
+
+[project.urls]
+Homepage = "https://github.com/kmagusiak/odoo-connect"
+
+[[project.authors]]
+name = "Krzysztof Magusiak"
+email = "chrmag@poczta.onet.pl"
 
 [tool.black]
 line-length = 100
@@ -16,6 +42,9 @@ ignore_missing_imports = true
 [tool.isort]
 profile = "black"
 line_length = 100
+
+[tools.setuptools]
+packages = ["odoo_connect"]
 
 [tool.setuptools_scm]
 local_scheme = "no-local-version"

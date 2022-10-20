@@ -3,8 +3,9 @@
 # C901: complexity check (mccabe)
 # * Errors & style (https://flake8.pycqa.org/en/latest/user/error-codes.html)
 # E123,E133: ignored by default by pep8, so we ignore them here
-# E203: not pep8 compliant
+# E203: space before comma, not pep8 compliant
 # E241,E242: spacing after a comma - not used
+# F401: module imported but unused
 # F812: list comprehension redefines name
 # W503: line break before operator - ignored as W504 is in pep8
 # * Documentation (https://pep257.readthedocs.io/en/latest/error_codes.html)
@@ -17,4 +18,6 @@
 ignore = C901,E123,E133,E203,F812,W503,D102,D205,D400
 max-line-length = 100
 exclude = .venv,venv,.git
-max-complexity = 15
+max-complexity = 10
+per-file-ignores =
+  #**/__init__.py:F401
