@@ -54,7 +54,7 @@ class OdooClientBase(ABC):
         self,
         *,
         url: str,
-        database: str,
+        database: str = None,
         username: str = None,
         password: str = None,
         **_kwargs,
@@ -62,6 +62,9 @@ class OdooClientBase(ABC):
         """Create new connection and authenicate when username is given."""
         log = logging.getLogger(__name__)
         self.url = url
+        if not database:
+            log.debug("Lookup the default database for [%s]", url)
+            database = self._setup_default_database()
         self._database = database
         log.info(
             "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
@@ -76,6 +79,22 @@ class OdooClientBase(ABC):
             self.authenticate('', None)
         self._models = {}
         self._version = {}
+
+    def _setup_default_database(self) -> str:
+        """Gets the default database from the server"""
+        # Get the default
+        try:
+            db = self._call("db", "monodb")
+            if isinstance(db, str) and db:
+                return db
+        except OdooServerError:
+            pass
+        # Try to list databases
+        dbs = self.list_databases()
+        if len(dbs) == 1:
+            return dbs[0]
+        # Fail
+        raise OdooServerError('Cannot determine the database for [%s]' % self.url)
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""

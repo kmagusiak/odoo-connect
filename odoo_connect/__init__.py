@@ -20,7 +20,7 @@ def connect(
     When infer_paramters is set, the url is parsed to get additional information.
     - When missing, the scheme is https (or http on localhost)
     - When missing we try the following heuristics: the database is read from the path,
-      in a multipart host name, the first part is used, otherwise just "odoo"
+      in a multipart host name, the first part is used, otherwise a default database
     - The username and password are read if present in the url
     - When missing, the password is copied from the user
 
@@ -28,7 +28,7 @@ def connect(
     - https://user:pwd@hostname/database
     - mytest.odoo.com -> https://mytest.odoo.com/mytest
     - localhost -> http://localhost/odoo
-    - https://admin@myserver:8069 would connect with password "admin" to "odoo" database
+    - https://admin@myserver:8069 would connect with password "admin" to the default database
 
     :param url: The URL to the server, it may encode other information when infer_parameters is set
     :param database: The database name
@@ -56,9 +56,6 @@ def connect(
             dot = url.hostname.find('.')
             if dot > 0:
                 database = url.hostname[:dot]
-        if not database:
-            # by default set to odoo
-            database = 'odoo'
         if not username and url.username:
             # read username and password from the url
             username = url.username
