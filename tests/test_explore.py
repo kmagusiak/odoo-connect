@@ -45,6 +45,13 @@ def odoo_cli_partner(odoo_cli, odoo_json_rpc_handler) -> Instance:
             result.append(id)
         return result
 
+    @handler.patch_execute_kw('res.partner', 'write')
+    def write(ids, values):
+        for d in data:
+            if d['id'] in ids:
+                d.update(values)
+        return True
+
     partner = explore(odoo_cli['res.partner'])
     partner.invalidate_cache()
     return partner
