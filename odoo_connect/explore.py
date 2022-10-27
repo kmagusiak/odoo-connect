@@ -191,6 +191,11 @@ class Instance:
         self.__model.write(self.__ids, values)
         self.invalidate_cache(self.__ids)
 
+    def unlink(self):
+        """Remove the records from the database"""
+        self.invalidate_cache(self.__ids)
+        self.__model.unlink(self.__ids)
+
     def __cache(self) -> Dict[int, Dict[str, Any]]:
         model_cache = GLOBAL_CACHE.get(self.__model)
         if not model_cache:
