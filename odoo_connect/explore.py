@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Union
+from typing import Any, Callable, Dict, Iterable, List, Union
 
 import odoo_connect.format
 
@@ -18,11 +18,40 @@ class Instance:
         self.__model = model
         self.__ids = ids
 
+    def __bool__(self) -> bool:
+        return bool(self.__ids)
+
     def __len__(self):
         return len(self.__ids)
 
     def __dir__(self) -> Iterable[str]:
         return self.__model.fields().keys()
+
+    def __plus__(self, other) -> "Instance":
+        if self.__model.model != other.__model.model or not isinstance(other, Instance):
+            raise ValueError('Cannot combine different models')
+        ids = self.__ids + other.__ids
+        return Instance(self.__model, ids)
+
+    def __sub__(self, other) -> "Instance":
+        if self.__model.model != other.__model.model or not isinstance(other, Instance):
+            raise ValueError('Cannot combine different models')
+        otherset = set(other.__ids)
+        ids = [i for i in self.__ids if i not in otherset]
+        return Instance(self.__model, ids)
+
+    def __or__(self, other) -> "Instance":
+        if self.__model.model != other.__model.model or not isinstance(other, Instance):
+            raise ValueError('Cannot combine different models')
+        ids = self.__ids + (other - self).__ids
+        return Instance(self.__model, ids)
+
+    def __and__(self, other) -> "Instance":
+        if self.__model.model != other.__model.model or not isinstance(other, Instance):
+            raise ValueError('Cannot combine different models')
+        otherset = set(other.__ids)
+        ids = [i for i in self.__ids if i in otherset]
+        return Instance(self.__model, ids)
 
     @property
     def ids(self) -> List[int]:
@@ -189,6 +218,24 @@ class Instance:
         else:
             for id in ids:
                 model_cache.pop(id, None)
+
+    def filtered(self, predicate: Callable[["Instance"], bool]) -> "Instance":
+        """Filter the records"""
+        # self.cache()  #  XXX
+        def _predicate(i):
+            return predicate(self.browse(i))
+
+        ids = list(filter(_predicate, self.__ids))
+        return Instance(self.__model, ids)
+
+    def sorted(self, order: Callable[["Instance"], Any]) -> "Instance":
+        """Sort the objects by a field"""
+        # self.cache()  #  XXX
+        def sorted_key(i):
+            return order(self.browse(i))
+
+        ids = sorted(self.__ids, key=sorted_key)
+        return Instance(self.__model, ids)
 
     def get_attachments(self) -> "Instance":
         """Return ir.attachment linked to this instance"""
