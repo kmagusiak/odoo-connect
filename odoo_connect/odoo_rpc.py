@@ -1,10 +1,12 @@
 import logging
+import random
 import re
-from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
+import requests
+
 __doc__ = """
-Base class for Odoo RPC.
+JSON-RPC class for Odoo RPC.
 """
 
 
@@ -50,13 +52,14 @@ class OdooServerError(RuntimeError):
         return dat.get('debug')
 
 
-class OdooClientBase(ABC):
+class OdooClient:
     """Odoo server connection"""
 
     url: str
     _models: Dict[str, "OdooModel"]
     _version: Dict[str, Any]
     _database: str
+    _uid: Optional[int]
 
     def __init__(
         self,
@@ -70,6 +73,8 @@ class OdooClientBase(ABC):
         """Create new connection and authenicate when username is given."""
         log = logging.getLogger(__name__)
         self.url = url
+        self.__json_url = urljoin(url, "jsonrpc")
+        self.session = requests.Session()
         self._database = database
         log.info(
             "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
@@ -104,10 +109,23 @@ class OdooClientBase(ABC):
         if not self._uid:
             raise OdooServerError('Failed to authenticate user %s' % username)
 
-    @abstractmethod
+    def _json_rpc(self, method: str, params: Any):
+        """Make a jsonrpc call"""
+        data = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": random.randint(0, 1000000000),
+        }
+        resp = self.session.post(self.__json_url, json=data)
+        resp.raise_for_status()
+        reply = resp.json()
+        if reply.get("error"):
+            raise OdooServerError(reply["error"])
+        return reply.get("result", None)
+
     def _call(self, service: str, method: str, *args):
-        """Execute a method on a service"""
-        raise NotImplementedError
+        return self._json_rpc("call", {"service": service, "method": method, "args": args})
 
     def _execute_kw(self, model: str, method: str, *args, **kw):
         """Execute a method on a model"""
@@ -192,10 +210,9 @@ class OdooClientBase(ABC):
         return self.version()['server_version_info'][0]
 
     @property
-    @abstractmethod
     def protocol(self) -> str:
         """Get protocol used"""
-        return "unknown"
+        return "jsonrpc"
 
     def is_connected(self) -> bool:
         """Check if we are connected"""
@@ -240,7 +257,7 @@ class OdooClientBase(ABC):
 class OdooModel:
     """Odoo model (object) RPC functions"""
 
-    def __init__(self, odoo: OdooClientBase, model: str):
+    def __init__(self, odoo: OdooClient, model: str):
         """Initialize the model instance.
 
         :param odoo: Odoo instance
