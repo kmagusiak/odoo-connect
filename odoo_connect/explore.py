@@ -49,7 +49,7 @@ class Instance:
                 return self._formatter().decode_function[__name](value[0])
             if len(self.__ids) == 0:
                 return False
-            raise Exception('Too many values to unpack: ' + __name)
+            raise ValueError('Too many values to unpack: ' + __name)
         return value
 
     def __setattr__(self, __name: str, __value: Any) -> None:
@@ -80,7 +80,7 @@ class Instance:
         if len(paths) > 1:
             value = self._mapped(paths[0])
             if not isinstance(value, Instance):
-                raise Exception(f'{paths[0]} is not a relation')
+                raise ValueError(f'{paths[0]} is not a relation')
             return value.mapped(paths[1])
         return self._mapped(path)
 
@@ -88,8 +88,8 @@ class Instance:
         """Map/read a field"""
         prop = self.__model.fields().get(field_name)
         if not prop:
-            raise Exception(f'Invalid field: {field_name}')
-        values = [d[field_name] for d in self.read(check_field=field_name)]
+            raise ValueError(f'Invalid field: {field_name}')
+        values = [d[field_name] for d in self.read(check_fields=[field_name])]
         relation = prop.get('relation')
         if relation:
             model = self.__model.odoo.get_model(relation)
@@ -97,18 +97,31 @@ class Instance:
             return Instance(model, list(ids))
         return values
 
-    def read(self, *, check_field=None) -> List[Dict[str, Any]]:
+    def read(self, *, check_fields: List[str] = []) -> List[Dict[str, Any]]:
         """Read the data"""
         fields = self._default_fields()
         model_cache = self.__cache()
+        # check if entry is in the cache
         missing_ids = set(self.__ids) - model_cache.keys()
         if missing_ids:
             model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), fields)})
-        if isinstance(check_field, str) and check_field not in fields:
-            missing_ids = set(i for i in self.__ids if check_field not in model_cache[i])
-            for d in self.__model.read(list(missing_ids), [check_field]) if missing_ids else []:
-                model_cache[d['id']][check_field] = d[check_field]
-        return [model_cache[i] for i in self.__ids]
+        # check if additional field is in the cache
+        if check_fields:
+            fieldset = set(check_fields)
+            missing_ids = set(i for i in self.__ids if fieldset - model_cache[i].keys())
+            for d in self.__model.read(list(missing_ids), list(fieldset)) if missing_ids else []:
+                for field in check_fields:
+                    model_cache[d['id']][field] = d[fields]
+        # return the result
+        try:
+            return [model_cache[i] for i in self.__ids]
+        except KeyError as e:
+            raise odoo_rpc.OdooServerError(f"Cannot read {self.__model.model}: {e}")
+
+    def cache(self, fields: List[str] = []):
+        """Cache the record fiels and return self"""
+        self.read(check_fields=fields)
+        return self
 
     def _default_fields(self):
         data = self.__model.fields()
