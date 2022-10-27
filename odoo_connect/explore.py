@@ -27,7 +27,7 @@ class Instance:
     def __dir__(self) -> Iterable[str]:
         return self.__model.fields().keys()
 
-    def __plus__(self, other) -> "Instance":
+    def __add__(self, other) -> "Instance":
         if self.__model.model != other.__model.model or not isinstance(other, Instance):
             raise ValueError('Cannot combine different models')
         ids = self.__ids + other.__ids
@@ -225,6 +225,11 @@ class Instance:
         self.invalidate_cache(self.__ids)
         self.__model.unlink(self.__ids)
 
+    def copy(self):
+        """Copy the records in the database"""
+        ids = self.__model.copy(self.__ids)
+        return self.browse(*ids)
+
     def __cache(self) -> Dict[int, Dict[str, Any]]:
         model_cache = GLOBAL_CACHE.get(self.__model)
         if not model_cache:
@@ -244,19 +249,21 @@ class Instance:
 
     def filtered(self, predicate: Callable[["Instance"], bool]) -> "Instance":
         """Filter the records"""
-        # self.cache()  #  XXX
+
         def _predicate(i):
             return predicate(self.browse(i))
 
+        self.cache(computed=False)
         ids = list(filter(_predicate, self.__ids))
         return Instance(self.__model, ids)
 
     def sorted(self, order: Callable[["Instance"], Any]) -> "Instance":
         """Sort the objects by a field"""
-        # self.cache()  #  XXX
+
         def sorted_key(i):
             return order(self.browse(i))
 
+        self.cache(computed=False)
         ids = sorted(self.__ids, key=sorted_key)
         return Instance(self.__model, ids)
 

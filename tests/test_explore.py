@@ -85,6 +85,27 @@ def test_ex_cache(odoo_cli_partner: Instance):
     assert inst.display_name
 
 
+def test_ex_exist(odoo_cli_partner: Instance):
+    inst = odoo_cli_partner.browse(*range(10)).exists()
+    assert 0 < len(inst) < 10
+
+
+def test_ex_combine(odoo_cli_partner: Instance):
+    a = odoo_cli_partner.browse(5, 6)
+    b = odoo_cli_partner.browse(6, 7)
+    assert len(a + b) == 4
+    assert (a - b).ids == [5]
+    assert (a | b).ids == [5, 6, 7]
+    assert (a & b).ids == [6]
+
+
+def test_ex_filtered(odoo_cli_partner: Instance):
+    inst = odoo_cli_partner.browse(1, 2)
+    assert len(inst) == 2
+    inst = inst.filtered(lambda i: i.name == 'test')
+    assert len(inst) == 1
+
+
 def test_ex_create(odoo_cli_partner: Instance):
     inst = odoo_cli_partner.create({'name': 'ok'})
     assert inst
@@ -96,3 +117,10 @@ def test_ex_write(odoo_cli_partner: Instance):
     assert inst.name == 'test'
     inst.name = 'ok'
     assert inst.name == 'ok'
+
+
+def test_ex_write_format(odoo_cli_partner: Instance):
+    inst = odoo_cli_partner.browse(1)
+    assert inst.name == 'test'
+    inst.write({'name': ''}, format=True)
+    assert inst.name is False
