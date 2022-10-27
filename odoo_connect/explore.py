@@ -97,39 +97,42 @@ class Instance:
             return Instance(model, list(ids))
         return values
 
-    def cache(self, fields: List[str] = []) -> "Instance":
+    def cache(self, fields: List[str] = [], computed=True, exists=False) -> "Instance":
         """Cache the record fields and return self"""
-        fieldset = set(self._default_fields())
+        fieldset = set(self._default_fields(computed=computed) + fields)
         model_cache = self.__cache()
-        # check if entry is in the cache
-        missing_ids = set(self.__ids) - model_cache.keys()
-        if missing_ids:
-            model_cache.update(
-                {d['id']: d for d in self.__model.read(list(missing_ids), list(fieldset))}
-            )
-        # check if additional field is in the cache
-        fieldset = set(fields) - fieldset
-        if fieldset:
-            missing_ids = set(i for i in self.__ids if fieldset - model_cache[i].keys())
-            for d in self.__model.read(list(missing_ids), list(fieldset)) if missing_ids else []:
-                model_cache[d['id']].update(d)
+        # find missing ids, when missing in cache or field missing in cache
+        # read all at once to have more consistency and avoid roundtrips
+        missing_ids = set(i for i in self.__ids if fieldset - model_cache.get(i, {}).keys())
+        # an exists check is not needed because read() will return only existing rows
+        if not missing_ids:
+            return self
+        for d in self.__model.read(list(missing_ids), list(fieldset)):
+            id = d['id']
+            if id in model_cache:
+                model_cache[id].update(d)
+            else:
+                model_cache[id] = d
         return self
 
     def read(self, *, check_fields: List[str] = []) -> List[Dict[str, Any]]:
         """Read the data"""
-        self.cache(check_fields)
+        self.cache(fields=check_fields, computed=False)
         model_cache = self.__cache()
         try:
             return [model_cache[i] for i in self.__ids]
         except KeyError as e:
             raise odoo_rpc.OdooServerError(f"Cannot read {self.__model.model}: {e}")
 
-    def _default_fields(self) -> List[str]:
+    def _default_fields(self, *, computed=False) -> List[str]:
+        """List of fields to read by default"""
         data = self.__model.fields()
         return [
             f
             for f, prop in data.items()
-            if '2many' not in (prop.get('type') or '') and prop.get('type') != 'binary'
+            if '2many' not in (prop.get('type') or '')
+            and prop.get('type') != 'binary'
+            and (computed or f in ('id', 'display_name') or prop.get('store'))
         ]
 
     def fields_get(self, field_names=[]) -> Dict[str, Dict]:
@@ -147,7 +150,7 @@ class Instance:
         """Return only existing records"""
         # re-read records to validate
         self.invalidate_cache(self.__ids)
-        self.cache()
+        self.cache(computed=False, exists=True)
         model_cache = self.__cache()
         ids = set(self.__ids) & model_cache.keys()
         return self.browse(*ids) if len(ids) < len(self.__ids) else self
@@ -156,8 +159,9 @@ class Instance:
         """Search for an instance"""
         fields = self._default_fields()
         data = self.__model.search_read(domain, fields, **kw)
+        # add only new data, keep cache consistent
         model_cache = self.__cache()
-        model_cache.update({d['id']: d for d in data})
+        model_cache.update({d['id']: d for d in data if d['id'] not in model_cache})
         return Instance(self.__model, [d['id'] for d in data])
 
     def name_search(self, name: str, **kw) -> "Instance":
