@@ -78,7 +78,7 @@ class Instance:
                 return self._formatter().decode_function[__name](value[0])
             if len(self.__ids) == 0:
                 return False
-            raise Exception('Too many values to unpack: ' + __name)
+            raise ValueError('Too many values to unpack: ' + __name)
         return value
 
     def __setattr__(self, __name: str, __value: Any) -> None:
@@ -109,7 +109,7 @@ class Instance:
         if len(paths) > 1:
             value = self._mapped(paths[0])
             if not isinstance(value, Instance):
-                raise Exception(f'{paths[0]} is not a relation')
+                raise ValueError(f'{paths[0]} is not a relation')
             return value.mapped(paths[1])
         return self._mapped(path)
 
@@ -117,8 +117,8 @@ class Instance:
         """Map/read a field"""
         prop = self.__model.fields().get(field_name)
         if not prop:
-            raise Exception(f'Invalid field: {field_name}')
-        values = [d[field_name] for d in self.read(check_field=field_name)]
+            raise ValueError(f'Invalid field: {field_name}')
+        values = [d[field_name] for d in self.read(check_fields=[field_name])]
         relation = prop.get('relation')
         if relation:
             model = self.__model.odoo.get_model(relation)
@@ -126,25 +126,42 @@ class Instance:
             return Instance(model, list(ids))
         return values
 
-    def read(self, *, check_field=None) -> List[Dict[str, Any]]:
-        """Read the data"""
-        fields = self._default_fields()
+    def cache(self, fields: List[str] = [], computed=True, exists=False) -> "Instance":
+        """Cache the record fields and return self"""
+        fieldset = set(self._default_fields(computed=computed) + fields)
         model_cache = self.__cache()
-        missing_ids = set(self.__ids) - model_cache.keys()
-        if missing_ids:
-            model_cache.update({d['id']: d for d in self.__model.read(list(missing_ids), fields)})
-        if isinstance(check_field, str) and check_field not in fields:
-            missing_ids = set(i for i in self.__ids if check_field not in model_cache[i])
-            for d in self.__model.read(list(missing_ids), [check_field]) if missing_ids else []:
-                model_cache[d['id']][check_field] = d[check_field]
-        return [model_cache[i] for i in self.__ids]
+        # find missing ids, when missing in cache or field missing in cache
+        # read all at once to have more consistency and avoid roundtrips
+        missing_ids = set(i for i in self.__ids if fieldset - model_cache.get(i, {}).keys())
+        # an exists check is not needed because read() will return only existing rows
+        if not missing_ids:
+            return self
+        for d in self.__model.read(list(missing_ids), list(fieldset)):
+            id = d['id']
+            if id in model_cache:
+                model_cache[id].update(d)
+            else:
+                model_cache[id] = d
+        return self
 
-    def _default_fields(self):
+    def read(self, *, check_fields: List[str] = []) -> List[Dict[str, Any]]:
+        """Read the data"""
+        self.cache(fields=check_fields, computed=False)
+        model_cache = self.__cache()
+        try:
+            return [model_cache[i] for i in self.__ids]
+        except KeyError as e:
+            raise odoo_rpc.OdooServerError(f"Cannot read {self.__model.model}: {e}")
+
+    def _default_fields(self, *, computed=False) -> List[str]:
+        """List of fields to read by default"""
         data = self.__model.fields()
         return [
             f
             for f, prop in data.items()
-            if '2many' not in (prop.get('type') or '') and prop.get('type') != 'binary'
+            if '2many' not in (prop.get('type') or '')
+            and prop.get('type') != 'binary'
+            and (computed or f in ('id', 'display_name') or prop.get('store'))
         ]
 
     def fields_get(self, field_names=[]) -> Dict[str, Dict]:
@@ -162,7 +179,7 @@ class Instance:
         """Return only existing records"""
         # re-read records to validate
         self.invalidate_cache(self.__ids)
-        self.read()
+        self.cache(computed=False, exists=True)
         model_cache = self.__cache()
         ids = set(self.__ids) & model_cache.keys()
         return self.browse(*ids) if len(ids) < len(self.__ids) else self
@@ -171,8 +188,9 @@ class Instance:
         """Search for an instance"""
         fields = self._default_fields()
         data = self.__model.search_read(domain, fields, **kw)
+        # add only new data, keep cache consistent
         model_cache = self.__cache()
-        model_cache.update({d['id']: d for d in data})
+        model_cache.update({d['id']: d for d in data if d['id'] not in model_cache})
         return Instance(self.__model, [d['id'] for d in data])
 
     def name_search(self, name: str, **kw) -> "Instance":
@@ -201,6 +219,11 @@ class Instance:
             values = self._formatter().format_dict(values)
         self.__model.write(self.__ids, values)
         self.invalidate_cache(self.__ids)
+
+    def unlink(self):
+        """Remove the records from the database"""
+        self.invalidate_cache(self.__ids)
+        self.__model.unlink(self.__ids)
 
     def __cache(self) -> Dict[int, Dict[str, Any]]:
         model_cache = GLOBAL_CACHE.get(self.__model)

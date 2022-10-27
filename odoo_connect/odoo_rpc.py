@@ -39,7 +39,15 @@ def get_month(value: str) -> int:
 class OdooServerError(RuntimeError):
     """Error returned by Odoo"""
 
-    pass
+    def get_data(self) -> Optional[dict]:
+        """Get the data dictionnary for the error"""
+        return next((a for a in self.args if isinstance(a, dict)), None)
+
+    def get_remote_trace(self) -> Optional[str]:
+        """Get the debug trace received from the remote server"""
+        data = self.get_data() or {}
+        dat = data.get('data') or {}
+        return dat.get('debug')
 
 
 class OdooClientBase(ABC):
