@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, overload
 
 from .format import Formatter, decode_binary
-from .odoo_rpc import OdooClientBase, OdooModel, urljoin
+from .odoo_rpc import OdooClient, OdooModel, urljoin
 
 __doc__ = """
 Export and import data from Odoo.
@@ -73,7 +73,7 @@ def get_attachment(
     return decode_binary(value)
 
 
-def get_attachments(odoo: OdooClientBase, ids: List[int]) -> Dict[int, bytes]:
+def get_attachments(odoo: OdooClient, ids: List[int]) -> Dict[int, bytes]:
     """Get a list of tuples (name, raw_bytes) from ir.attachment by ids
 
     :param odoo: Odoo client
@@ -153,7 +153,7 @@ def list_attachments(
 
 
 def _download_content(
-    odoo: OdooClientBase, url: str, *, params: Dict = {}, access_token: Optional[str] = None
+    odoo: OdooClient, url: str, *, params: Dict = {}, access_token: Optional[str] = None
 ) -> bytes:
     """Download contents from a URL"""
     # In the implementation, the session is authenticated.
