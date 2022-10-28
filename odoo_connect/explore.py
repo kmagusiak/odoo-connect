@@ -122,11 +122,12 @@ class Instance:
         relation = prop.get('relation')
         if relation:
             model = self.__model.odoo.get_model(relation)
-            ids = set(i for v in values for i in v or [] if isinstance(i, int) and i)
+            # value is either list[int] (many) or list[tuple[int, str]|False] (one)
+            ids = set(i for v in values for i in (v or []) if isinstance(i, int) and i)
             return Instance(model, list(ids))
         return values
 
-    def cache(self, fields: List[str] = [], computed=True, exists=False) -> "Instance":
+    def cache(self, fields: List[str] = [], computed=False, exists=False) -> "Instance":
         """Cache the record fields and return self"""
         fieldset = set(self._default_fields(computed=computed) + fields)
         model_cache = self.__cache()
@@ -146,7 +147,7 @@ class Instance:
 
     def read(self, *, check_fields: List[str] = []) -> List[Dict[str, Any]]:
         """Read the data"""
-        self.cache(fields=check_fields, computed=False)
+        self.cache(fields=check_fields)
         model_cache = self.__cache()
         try:
             return [model_cache[i] for i in self.__ids]
