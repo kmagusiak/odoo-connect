@@ -75,11 +75,10 @@ class OdooClient:
         """Create new connection and authenicate when username is given."""
         log = logging.getLogger(__name__)
         self.url = url
-        self.__json_url = urljoin(url, "jsonrpc")
-        self.session = requests.Session()
         self._database = database
         self._models = {}
         self._version = {}
+        self._init_session()
         log.info(
             "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
             self.protocol,
@@ -91,6 +90,11 @@ class OdooClient:
             log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
         else:
             self.authenticate('', None)
+
+    def _init_session(self):
+        """Initialize the session"""
+        self.__json_url = urljoin(self.url, "jsonrpc")
+        self.session = requests.Session()
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
