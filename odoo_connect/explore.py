@@ -134,7 +134,7 @@ class Instance:
         # find missing ids, when missing in cache or field missing in cache
         # read all at once to have more consistency and avoid roundtrips
         missing_ids = set(i for i in self.__ids if fieldset - model_cache.get(i, {}).keys())
-        # an exists check is not needed because read() will return only existing rows
+        # an exists() check is not needed because read() will return only existing rows
         if not missing_ids:
             return self
         for d in self.__model.read(list(missing_ids), list(fieldset)):
