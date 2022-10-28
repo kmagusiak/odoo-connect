@@ -107,16 +107,26 @@ def list_attachments(
         fields += ['website_url', 'url', 'public', 'access_token']
     fields = list({'id', 'name', 'res_id', 'res_field', *fields} - {url_field})
     # Get the data
-    attachments = model.odoo['ir.attachment']
-    data = attachments.search_read(
-        [
-            ('res_model', '=', model.model),
-            ('res_id', 'in', ids),
-            ('id', '!=', 0),  # to get all res_field
-        ]
-        + domain,
-        fields,
-    )
+    if model.model == 'ir.attachment':
+        attachments = model
+        data = attachments.search_read(
+            [
+                ('id', 'in', ids),
+            ]
+            + domain,
+            fields,
+        )
+    else:
+        attachments = model.odoo['ir.attachment']
+        data = attachments.search_read(
+            [
+                ('res_model', '=', model.model),
+                ('res_id', 'in', ids),
+                ('id', '!=', 0),  # to get all res_field
+            ]
+            + domain,
+            fields,
+        )
     # Get contents
     if 'datas' in fields:
         for d in data:

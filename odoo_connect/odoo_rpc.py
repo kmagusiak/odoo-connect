@@ -39,7 +39,15 @@ def get_month(value: str) -> int:
 class OdooServerError(RuntimeError):
     """Error returned by Odoo"""
 
-    pass
+    def get_data(self) -> Optional[dict]:
+        """Get the data dictionnary for the error"""
+        return next((a for a in self.args if isinstance(a, dict)), None)
+
+    def get_remote_trace(self) -> Optional[str]:
+        """Get the debug trace received from the remote server"""
+        data = self.get_data() or {}
+        dat = data.get('data') or {}
+        return dat.get('debug')
 
 
 class OdooClientBase(ABC):
@@ -49,6 +57,9 @@ class OdooClientBase(ABC):
     _models: Dict[str, "OdooModel"]
     _version: Dict[str, Any]
     _database: str
+    _username: str
+    _password: Optional[str]
+    _uid: Optional[int]
 
     def __init__(
         self,
@@ -66,6 +77,8 @@ class OdooClientBase(ABC):
             log.debug("Lookup the default database for [%s]", url)
             database = self._setup_default_database()
         self._database = database
+        self._models = {}
+        self._version = {}
         log.info(
             "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
             self.protocol,
@@ -77,8 +90,6 @@ class OdooClientBase(ABC):
             log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
         else:
             self.authenticate('', None)
-        self._models = {}
-        self._version = {}
 
     def _setup_default_database(self) -> str:
         """Gets the default database from the server"""
@@ -98,10 +109,10 @@ class OdooClientBase(ABC):
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
+        self._uid = None
         self._username = username
         self._password = password
         if not username:
-            self._uid = None
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -209,7 +220,7 @@ class OdooClientBase(ABC):
         return "unknown"
 
     def is_connected(self) -> bool:
-        """Check if we are connected"""
+        """Check if the authentication is done"""
         return self._uid is not None
 
     @property
