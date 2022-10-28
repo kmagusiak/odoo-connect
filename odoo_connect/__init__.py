@@ -1,11 +1,17 @@
 import urllib.parse
 from typing import Optional
 
-from .odoo_rpc import OdooClient, OdooModel  # noqa
+from .odoo_rpc import OdooClient, OdooModel, OdooServerError  # noqa
 
 __doc__ = """
 Simple Odoo RPC library.
 """
+
+
+class OdooConnectionError(OdooServerError):
+    """Connection error"""
+
+    pass
 
 
 def connect(
@@ -14,6 +20,7 @@ def connect(
     username: Optional[str] = None,
     password: Optional[str] = None,
     infer_parameters: bool = True,
+    check_connection: bool = True,
 ) -> OdooClient:
     """Connect to an odoo database.
 
@@ -35,6 +42,7 @@ def connect(
     :param username: The username (when set, we try to authenticate the user during the connection)
     :param password: The password
     :param infer_paramters: Whether to infer parameters (default: True)
+    :param check_connection: Raise an error if the connection fails (default: True)
     :return: Connection object to the Odoo instance
     """
     urlx = urllib.parse.urlparse(url)
@@ -77,4 +85,14 @@ def connect(
         raise ValueError('Missing database for Odoo connection')
 
     # Create the connection
-    return OdooClient(url=urlx.geturl(), database=database, username=username, password=password)
+    try:
+        client = OdooClient(
+            url=urlx.geturl(), database=database, username=username, password=password
+        )
+        if check_connection and not client.is_connected():
+            client.version()
+        return client
+    except (NotImplementedError, OdooConnectionError):
+        raise
+    except (ConnectionError, IOError, OdooServerError) as e:
+        raise OdooConnectionError(e)

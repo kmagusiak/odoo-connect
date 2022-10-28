@@ -59,6 +59,8 @@ class OdooClient:
     _models: Dict[str, "OdooModel"]
     _version: Dict[str, Any]
     _database: str
+    _username: str
+    _password: Optional[str]
     _uid: Optional[int]
 
     def __init__(
@@ -76,6 +78,8 @@ class OdooClient:
         self.__json_url = urljoin(url, "jsonrpc")
         self.session = requests.Session()
         self._database = database
+        self._models = {}
+        self._version = {}
         log.info(
             "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
             self.protocol,
@@ -87,15 +91,13 @@ class OdooClient:
             log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
         else:
             self.authenticate('', None)
-        self._models = {}
-        self._version = {}
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
+        self._uid = None
         self._username = username
         self._password = password
         if not username:
-            self._uid = None
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -215,7 +217,7 @@ class OdooClient:
         return "jsonrpc"
 
     def is_connected(self) -> bool:
-        """Check if we are connected"""
+        """Check if the authentication is done"""
         return self._uid is not None
 
     @property
