@@ -61,9 +61,14 @@ def connect(
                 url = url._replace(path='/')
         if not database:
             # try to extract the database from the hostname
-            dot = url.hostname.find('.')
-            if dot > 0:
-                database = url.hostname[:dot]
+            name_split = url.hostname.split('.')
+            if (
+                len(name_split) > 2
+                and name_split[0]
+                and name_split[1] == 'dev'
+                and name_split[-2] == 'odoo'
+            ):
+                database = name_split[0]
         if not username and url.username:
             # read username and password from the url
             username = url.username

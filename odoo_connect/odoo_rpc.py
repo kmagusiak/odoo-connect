@@ -65,9 +65,9 @@ class OdooClientBase(ABC):
         self,
         *,
         url: str,
-        database: str = None,
-        username: str = None,
-        password: str = None,
+        database: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
         **_kwargs,
     ):
         """Create new connection and authenicate when username is given."""
