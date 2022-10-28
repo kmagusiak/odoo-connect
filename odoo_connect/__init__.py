@@ -1,10 +1,16 @@
 import urllib.parse
 
-from .odoo_rpc import OdooClientBase, OdooModel  # noqa
+from .odoo_rpc import OdooClientBase, OdooModel, OdooServerError  # noqa
 
 __doc__ = """
 Simple Odoo RPC library.
 """
+
+
+class OdooConnectionError(OdooServerError):
+    """Connection error"""
+
+    pass
 
 
 def connect(
@@ -14,6 +20,7 @@ def connect(
     password=None,
     rpctype='jsonrpc',
     infer_parameters=True,
+    check_connection=True,
 ):
     """Connect to an odoo database.
 
@@ -36,6 +43,7 @@ def connect(
     :param password: The password
     :param rpctype: The type of RPC (default: jsonrpc)
     :param infer_paramters: Whether to infer parameters (default: True)
+    :param check_connection: Raise an error if the connection fails (default: True)
     :return: Connection object to the Odoo instance
     """
     url = urllib.parse.urlparse(url)
@@ -79,8 +87,18 @@ def connect(
         'username': username,
         'password': password,
     }
+    try:
+        conn = _create_connection(args, rpctype)
+        if check_connection and not conn.is_connected():
+            conn.version()
+        return conn
+    except (NotImplementedError, OdooConnectionError):
+        raise
+    except (ConnectionError, IOError, OdooServerError) as e:
+        raise OdooConnectionError(e)
 
-    # Create the connection
+
+def _create_connection(args, rpctype):
     if rpctype == 'jsonrpc':
         from . import odoo_rpc_json
 
