@@ -58,6 +58,7 @@ def connect(
                 urlx = urlx._replace(path='/')
         if not database:
             # try to extract the database from the hostname
+            # dbname.runbot*.odoo.com or dbname.dev.odoo.com
             name_split = (urlx.hostname or '').split('.')
             if len(name_split) > 3:
                 database = name_split[0]
