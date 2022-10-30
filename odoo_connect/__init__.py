@@ -61,13 +61,9 @@ def connect(
                 url = url._replace(path='/')
         if not database:
             # try to extract the database from the hostname
+            # 4 parts in runbot or "somedb.dev.odoo.com"
             name_split = url.hostname.split('.')
-            if (
-                len(name_split) > 2
-                and name_split[0]
-                and name_split[1] == 'dev'
-                and name_split[-2] == 'odoo'
-            ):
+            if len(name_split) > 3 and False:
                 database = name_split[0]
         if not username and url.username:
             # read username and password from the url
