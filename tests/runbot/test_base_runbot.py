@@ -1,11 +1,8 @@
-import pytest
-
 import odoo_connect
 
 
-@pytest.mark.parametrize("rpctype", ['jsonrpc', 'xmlrpc'])
-def test_user_with_protocol(connect_params, rpctype):
-    env = odoo_connect.connect(**connect_params, rpctype=rpctype)
+def test_user_with_protocol(connect_params):
+    env = odoo_connect.connect(**connect_params)
     user = env.user
     print(user)
     assert isinstance(user, dict), "Failed to get a response"

@@ -1,10 +1,12 @@
 import logging
+import random
 import re
-from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
+import requests
+
 __doc__ = """
-Base class for Odoo RPC.
+JSON-RPC class for Odoo RPC.
 """
 
 
@@ -50,7 +52,7 @@ class OdooServerError(RuntimeError):
         return dat.get('debug')
 
 
-class OdooClientBase(ABC):
+class OdooClient:
     """Odoo server connection"""
 
     url: str
@@ -71,29 +73,33 @@ class OdooClientBase(ABC):
         **_kwargs,
     ):
         """Create new connection and authenicate when username is given."""
-        log = logging.getLogger(__name__)
         self.url = url
         self._database = database
         self._models = {}
         self._version = {}
-        log.info(
-            "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
-            self.protocol,
+        self._username = ''
+        self._password = None
+        self._uid = None
+        self._init_session()
+        logging.getLogger(__name__).info(
+            "Odoo connection initialized [%s], db: [%s]",
             self.url,
             self.database,
         )
-        if username:
-            self.authenticate(username, password)
-            log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
-        else:
-            self.authenticate('', None)
+
+    def _init_session(self):
+        """Initialize the session"""
+        self.__json_url = urljoin(self.url, "jsonrpc")
+        self.session = requests.Session()
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
+        log = logging.getLogger(__name__)
         self._uid = None
         self._username = username
         self._password = password
         if not username:
+            log.info('Logged out [%s]' % self.url)
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -106,11 +112,25 @@ class OdooClientBase(ABC):
         )
         if not self._uid:
             raise OdooServerError('Failed to authenticate user %s' % username)
+        log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
 
-    @abstractmethod
+    def _json_rpc(self, method: str, params: Any):
+        """Make a jsonrpc call"""
+        data = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": random.randint(0, 1000000000),
+        }
+        resp = self.session.post(self.__json_url, json=data)
+        resp.raise_for_status()
+        reply = resp.json()
+        if reply.get("error"):
+            raise OdooServerError(reply["error"])
+        return reply.get("result", None)
+
     def _call(self, service: str, method: str, *args):
-        """Execute a method on a service"""
-        raise NotImplementedError
+        return self._json_rpc("call", {"service": service, "method": method, "args": args})
 
     def _execute_kw(self, model: str, method: str, *args, **kw):
         """Execute a method on a model"""
@@ -195,10 +215,9 @@ class OdooClientBase(ABC):
         return self.version()['server_version_info'][0]
 
     @property
-    @abstractmethod
     def protocol(self) -> str:
         """Get protocol used"""
-        return "unknown"
+        return "jsonrpc"
 
     def is_connected(self) -> bool:
         """Check if the authentication is done"""
@@ -243,7 +262,7 @@ class OdooClientBase(ABC):
 class OdooModel:
     """Odoo model (object) RPC functions"""
 
-    def __init__(self, odoo: OdooClientBase, model: str):
+    def __init__(self, odoo: OdooClient, model: str):
         """Initialize the model instance.
 
         :param odoo: Odoo instance
