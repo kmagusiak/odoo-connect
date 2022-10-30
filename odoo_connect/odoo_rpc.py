@@ -83,6 +83,7 @@ class OdooClient:
         self._init_session()
         if not database:
             self._database = self._init_default_database()
+        assert self._database
         logging.getLogger(__name__).info(
             "Odoo connection initialized [%s], db: [%s]",
             self.url,
