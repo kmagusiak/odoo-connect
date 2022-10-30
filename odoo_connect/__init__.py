@@ -86,10 +86,10 @@ def connect(
 
     # Create the connection
     try:
-        client = OdooClient(
-            url=urlx.geturl(), database=database, username=username, password=password
-        )
-        if check_connection and not client.is_connected():
+        client = OdooClient(url=urlx.geturl(), database=database)
+        if username:
+            client.authenticate(username, password)
+        elif check_connection:
             client.version()
         return client
     except (NotImplementedError, OdooConnectionError):

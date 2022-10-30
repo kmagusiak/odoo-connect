@@ -4,6 +4,9 @@ import odoo_connect.format
 
 from . import odoo_rpc
 
+__doc__ = """Interact more easily with Odoo records."""
+
+
 """Cache of read values"""
 GLOBAL_CACHE: Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]] = {}
 

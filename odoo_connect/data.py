@@ -5,8 +5,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, 
 from .format import Formatter, decode_binary
 from .odoo_rpc import OdooClient, OdooModel, urljoin
 
-__doc__ = """
-Export and import data from Odoo.
+__doc__ = """Export and import data from Odoo.
 
 ## Data
 To download values, use `export_data` which will return a table-like structure.

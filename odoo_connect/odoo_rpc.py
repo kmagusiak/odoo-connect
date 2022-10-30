@@ -73,23 +73,19 @@ class OdooClient:
         **_kwargs,
     ):
         """Create new connection and authenicate when username is given."""
-        log = logging.getLogger(__name__)
         self.url = url
         self._database = database
         self._models = {}
         self._version = {}
+        self._username = ''
+        self._password = None
+        self._uid = None
         self._init_session()
-        log.info(
-            "Odoo connection (protocol: [%s]) initialized [%s], db: [%s]",
-            self.protocol,
+        logging.getLogger(__name__).info(
+            "Odoo connection initialized [%s], db: [%s]",
             self.url,
             self.database,
         )
-        if username:
-            self.authenticate(username, password)
-            log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
-        else:
-            self.authenticate('', None)
 
     def _init_session(self):
         """Initialize the session"""
@@ -98,10 +94,12 @@ class OdooClient:
 
     def authenticate(self, username: str, password: Optional[str]):
         """Authenticate with username and password"""
+        log = logging.getLogger(__name__)
         self._uid = None
         self._username = username
         self._password = password
         if not username:
+            log.info('Logged out [%s]' % self.url)
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -114,6 +112,7 @@ class OdooClient:
         )
         if not self._uid:
             raise OdooServerError('Failed to authenticate user %s' % username)
+        log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
 
     def _json_rpc(self, method: str, params: Any):
         """Make a jsonrpc call"""
