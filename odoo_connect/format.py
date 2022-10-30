@@ -5,9 +5,7 @@ from typing import Any, Callable, Dict, Optional, Union, cast
 
 from .odoo_rpc import OdooModel
 
-__doc__ = """
-Formatting of fields for Odoo.
-"""
+__doc__ = """Formatting of fields for Odoo."""
 
 NOT_FORMATTED_FIELDS = {
     'display_name',
