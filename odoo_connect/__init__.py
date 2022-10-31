@@ -40,7 +40,7 @@ def connect(
     :param username: The username (when set, we try to authenticate the user during the connection)
     :param password: The password
     :param infer_paramters: Whether to infer parameters (default: True)
-    :param check_connection: Raise an error if the connection fails (default: True)
+    :param check_connection: Try to connect (default: True)
     :return: Connection object to the Odoo instance
     """
     urlx = urllib.parse.urlparse(url)
@@ -80,7 +80,7 @@ def connect(
 
     # Create the connection
     try:
-        client = OdooClient(url=urlx.geturl(), database=database)
+        client = OdooClient(url=url, database=database)
         if username:
             client.authenticate(username, password or '')
         elif check_connection:
