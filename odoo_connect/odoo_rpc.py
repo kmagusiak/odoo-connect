@@ -60,27 +60,28 @@ class OdooClient:
     _version: Dict[str, Any]
     _database: str
     _username: str
-    _password: Optional[str]
+    _password: str
     _uid: Optional[int]
 
     def __init__(
         self,
         *,
         url: str,
-        database: str,
-        username: str = None,
-        password: str = None,
+        database: Optional[str] = None,
         **_kwargs,
     ):
-        """Create new connection and authenicate when username is given."""
+        """Create new connection."""
         self.url = url
-        self._database = database
+        self._database = database or ''
         self._models = {}
         self._version = {}
         self._username = ''
-        self._password = None
+        self._password = ''
         self._uid = None
         self._init_session()
+        if not database:
+            self._database = self._init_default_database()
+        assert self._database
         logging.getLogger(__name__).info(
             "Odoo connection initialized [%s], db: [%s]",
             self.url,
@@ -92,14 +93,34 @@ class OdooClient:
         self.__json_url = urljoin(self.url, "jsonrpc")
         self.session = requests.Session()
 
-    def authenticate(self, username: str, password: Optional[str]):
+    def _init_default_database(self) -> str:
+        """Gets the default database from the server"""
+        log = logging.getLogger(__name__)
+        log.debug("Lookup the default database for [%s]", self.url)
+        # Get the default
+        try:
+            db = self._call("db", "monodb")
+            if isinstance(db, str) and db:
+                return db
+        except OdooServerError:
+            pass
+        # Try to list databases
+        dbs = self.list_databases()
+        if len(dbs) == 1:
+            return dbs[0]
+        # Fail
+        raise OdooServerError('Cannot determine the database for [%s]' % self.url)
+
+    def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
         log = logging.getLogger(__name__)
+        old_username = self._username
         self._uid = None
         self._username = username
         self._password = password
         if not username:
-            log.info('Logged out [%s]' % self.url)
+            if old_username:
+                log.info('Logged out [%s]' % self.url)
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -249,6 +270,13 @@ class OdooClient:
     def database(self) -> str:
         """Get database name"""
         return self._database
+
+    @database.setter
+    def database(self, database: str):
+        if database is None:
+            raise ValueError('Cannot set database: None')
+        self.authenticate('', '')  # log out first
+        self._database = database
 
     def __getitem__(self, model: str) -> "OdooModel":
         """Alias for get_model"""

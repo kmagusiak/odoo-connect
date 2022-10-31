@@ -3,9 +3,7 @@ from typing import Optional
 
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError  # noqa
 
-__doc__ = """
-Simple Odoo RPC library.
-"""
+__doc__ = """Simple Odoo RPC library."""
 
 
 class OdooConnectionError(OdooServerError):
@@ -27,7 +25,7 @@ def connect(
     When infer_paramters is set, the url is parsed to get additional information.
     - When missing, the scheme is https (or http on localhost)
     - When missing we try the following heuristics: the database is read from the path,
-      in a multipart host name, the first part is used, otherwise just "odoo"
+      in a multipart host name, the first part is used, otherwise a default database
     - The username and password are read if present in the url
     - When missing, the password is copied from the user
 
@@ -35,14 +33,14 @@ def connect(
     - https://user:pwd@hostname/database
     - mytest.odoo.com -> https://mytest.odoo.com/mytest
     - localhost -> http://localhost/odoo
-    - https://admin@myserver:8069 would connect with password "admin" to "odoo" database
+    - https://admin@myserver:8069 would connect with password "admin" to the default database
 
     :param url: The URL to the server, it may encode other information when infer_parameters is set
     :param database: The database name
     :param username: The username (when set, we try to authenticate the user during the connection)
     :param password: The password
     :param infer_paramters: Whether to infer parameters (default: True)
-    :param check_connection: Raise an error if the connection fails (default: True)
+    :param check_connection: Try to connect (default: True)
     :return: Connection object to the Odoo instance
     """
     urlx = urllib.parse.urlparse(url)
@@ -60,13 +58,10 @@ def connect(
                 urlx = urlx._replace(path='/')
         if not database:
             # try to extract the database from the hostname
-            hostname = urlx.hostname or ''
-            dot = hostname.find('.')
-            if dot > 0:
-                database = hostname[:dot]
-        if not database:
-            # by default set to odoo
-            database = 'odoo'
+            # dbname.runbot*.odoo.com or dbname.dev.odoo.com
+            name_split = (urlx.hostname or '').split('.')
+            if len(name_split) > 3:
+                database = name_split[0]
         if not username and urlx.username:
             # read username and password from the url
             username = urlx.username
@@ -81,14 +76,13 @@ def connect(
     if not urlx.scheme:
         # add a scheme
         urlx = urlx._replace(scheme="http" if urlx.hostname == "localhost" else "https")
-    if not database:
-        raise ValueError('Missing database for Odoo connection')
+    url = urlx.geturl()
 
     # Create the connection
     try:
-        client = OdooClient(url=urlx.geturl(), database=database)
+        client = OdooClient(url=url, database=database)
         if username:
-            client.authenticate(username, password)
+            client.authenticate(username, password or '')
         elif check_connection:
             client.version()
         return client

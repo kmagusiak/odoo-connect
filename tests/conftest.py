@@ -11,6 +11,7 @@ def connect_params(httpserver, odoo_json_rpc_handler):
     return {
         'url': httpserver.url_for('/'),
         'username': 'admin',
+        'database': 'odoo',
     }
 
 

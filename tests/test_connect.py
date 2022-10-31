@@ -18,7 +18,7 @@ def test_database(odoo_cli):
 
 @pytest.mark.tryfirst
 def test_version(connect_params):
-    env = odoo_connect.connect(connect_params['url'])
+    env = odoo_connect.connect(connect_params['url'], 'default')
     version = env.version()
     print(version)
     assert isinstance(version, dict)
