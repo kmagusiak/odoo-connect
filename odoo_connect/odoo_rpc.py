@@ -60,7 +60,7 @@ class OdooClient:
     _version: Dict[str, Any]
     _database: str
     _username: str
-    _password: Optional[str]
+    _password: str
     _uid: Optional[int]
 
     def __init__(
@@ -68,8 +68,6 @@ class OdooClient:
         *,
         url: str,
         database: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
         **_kwargs,
     ):
         """Create new connection and authenicate when username is given."""
@@ -78,7 +76,7 @@ class OdooClient:
         self._models = {}
         self._version = {}
         self._username = ''
-        self._password = None
+        self._password = ''
         self._uid = None
         self._init_session()
         if not database:
@@ -113,14 +111,16 @@ class OdooClient:
         # Fail
         raise OdooServerError('Cannot determine the database for [%s]' % self.url)
 
-    def authenticate(self, username: str, password: Optional[str]):
+    def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
         log = logging.getLogger(__name__)
+        old_username = self._username
         self._uid = None
         self._username = username
         self._password = password
         if not username:
-            log.info('Logged out [%s]' % self.url)
+            if old_username:
+                log.info('Logged out [%s]' % self.url)
             return
         user_agent_env = {}  # type: ignore
         self._uid = self._call(
@@ -270,6 +270,13 @@ class OdooClient:
     def database(self) -> str:
         """Get database name"""
         return self._database
+
+    @database.setter
+    def database(self, database: str):
+        if database is None:
+            raise ValueError('Cannot set database: None')
+        self.authenticate('', '')  # log out first
+        self._database = database
 
     def __getitem__(self, model: str) -> "OdooModel":
         """Alias for get_model"""

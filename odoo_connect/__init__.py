@@ -76,14 +76,13 @@ def connect(
     if not urlx.scheme:
         # add a scheme
         urlx = urlx._replace(scheme="http" if urlx.hostname == "localhost" else "https")
-    if not database:
-        raise ValueError('Missing database for Odoo connection')
+    url = urlx.geturl()
 
     # Create the connection
     try:
         client = OdooClient(url=urlx.geturl(), database=database)
         if username:
-            client.authenticate(username, password)
+            client.authenticate(username, password or '')
         elif check_connection:
             client.version()
         return client
