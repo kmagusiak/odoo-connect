@@ -70,7 +70,7 @@ class OdooClient:
         database: Optional[str] = None,
         **_kwargs,
     ):
-        """Create new connection and authenicate when username is given."""
+        """Create new connection and authenticate when username is given."""
         self.url = url
         self._database = database or ''
         self._models = {}
