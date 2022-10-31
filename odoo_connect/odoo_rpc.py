@@ -79,7 +79,7 @@ class OdooClient:
         self._password = ''
         self._uid = None
         self._init_session()
-        if not database:
+        if not database or database == '$monodb':
             self._database = self._init_default_database()
         assert self._database
         logging.getLogger(__name__).info(
@@ -99,15 +99,18 @@ class OdooClient:
         log.debug("Lookup the default database for [%s]", self.url)
         # Get the default
         try:
-            db = self._call("db", "monodb")
+            db = self._call("db", "monodb") if self._database == '$monodb' else None
             if isinstance(db, str) and db:
                 return db
         except OdooServerError:
             pass
         # Try to list databases
-        dbs = self.list_databases()
-        if len(dbs) == 1:
-            return dbs[0]
+        try:
+            dbs = self.list_databases()
+            if len(dbs) == 1:
+                return dbs[0]
+        except OdooServerError:
+            pass
         # Fail
         raise OdooServerError('Cannot determine the database for [%s]' % self.url)
 
