@@ -1,3 +1,4 @@
+import logging
 import urllib.parse
 from typing import Optional
 
@@ -20,6 +21,7 @@ def connect(
     infer_parameters: bool = True,
     check_connection: bool = True,
     monodb: bool = False,
+    **kw,
 ) -> OdooClient:
     """Connect to an odoo database.
 
@@ -44,6 +46,8 @@ def connect(
     :param monodb: Allow for a db.monodb call to find the default database
     :return: Connection object to the Odoo instance
     """
+    if kw:
+        logging.warning('Unknown connect() paramters: %s', kw.keys())
     urlx = urllib.parse.urlparse(url)
     if infer_parameters:
         if not urlx.scheme and not urlx.netloc and urlx.path:
