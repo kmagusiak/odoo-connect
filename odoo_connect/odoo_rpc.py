@@ -94,20 +94,18 @@ class OdooClient:
         log.debug("Lookup the default database for [%s]", self.url)
         # Get from monodb
         try:
-            log.debug('Try db.monodb: %s', monodb)
             db = self._call("db", "monodb") if monodb else None
             if isinstance(db, str) and db:
                 return db
-        except OdooServerError:
-            pass
+        except OdooServerError as e:
+            log.debug('db.monodb call failed: %s', e)
         # Try to list databases
         try:
-            log.debug('Try db.list: single database?')
             dbs = self.list_databases()
             if len(dbs) == 1:
                 return dbs[0]
-        except OdooServerError:
-            pass
+        except OdooServerError as e:
+            log.debug('db.list call failed: %s', e)
         # Fail
         raise OdooServerError('Cannot determine the database for [%s]' % self.url)
 
