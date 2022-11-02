@@ -1,3 +1,4 @@
+import logging
 import urllib.parse
 from typing import Optional
 
@@ -19,6 +20,8 @@ def connect(
     password: Optional[str] = None,
     infer_parameters: bool = True,
     check_connection: bool = True,
+    monodb: bool = False,
+    **kw,
 ) -> OdooClient:
     """Connect to an odoo database.
 
@@ -31,18 +34,24 @@ def connect(
 
     Some examples for infered parameters:
     - https://user:pwd@hostname/database
-    - mytest.odoo.com -> https://mytest.odoo.com/mytest
-    - localhost -> http://localhost/odoo
+    - mytest.dev.odoo.com -> https://mytest.dev.odoo.com/mytest
     - https://admin@myserver:8069 would connect with password "admin" to the default database
 
     :param url: The URL to the server, it may encode other information when infer_parameters is set
-    :param database: The database name
+    :param database: The database name (optional)
     :param username: The username (when set, we try to authenticate the user during the connection)
     :param password: The password
     :param infer_paramters: Whether to infer parameters (default: True)
     :param check_connection: Try to connect (default: True)
+    :param monodb: Allow for a db.monodb call to find the default database
+           (default: set when database == "@monodb")
     :return: Connection object to the Odoo instance
     """
+    if kw:
+        logging.warning('Unknown connect() paramters: %s', kw.keys())
+    if database == '@monodb':
+        monodb = True
+        database = None
     urlx = urllib.parse.urlparse(url)
     if infer_parameters:
         if not urlx.scheme and not urlx.netloc and urlx.path:
@@ -81,6 +90,10 @@ def connect(
     # Create the connection
     try:
         client = OdooClient(url=url, database=database)
+        if not database:
+            database = client._find_default_database(monodb=monodb)
+            check_connection = False  # no need, we already got a database
+            client.database = database
         if username:
             client.authenticate(username, password or '')
         elif check_connection:
