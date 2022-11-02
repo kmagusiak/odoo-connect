@@ -94,6 +94,7 @@ class OdooClient:
         log.debug("Lookup the default database for [%s]", self.url)
         # Get from monodb
         try:
+            log.debug('Try db.monodb: %s', monodb)
             db = self._call("db", "monodb") if monodb else None
             if isinstance(db, str) and db:
                 return db
@@ -101,6 +102,7 @@ class OdooClient:
             pass
         # Try to list databases
         try:
+            log.debug('Try db.list: single database?')
             dbs = self.list_databases()
             if len(dbs) == 1:
                 return dbs[0]
