@@ -48,7 +48,7 @@ def connect(
     :return: Connection object to the Odoo instance
     """
     if kw:
-        logging.warning('Unknown connect() paramters: %s', kw.keys())
+        logging.warning('Unknown connect() paramters: %s', list(kw.keys()))
     if database == '@monodb':
         monodb = True
         database = None
