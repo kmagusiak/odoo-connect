@@ -86,7 +86,8 @@ def test_add_xml_id(odoo_cli, odoo_json_rpc_handler):
     ],
 )
 def test_flatten(dict, fields, expected):
-    output = odoo_data.flatten([dict], fields)[0]
+    result = odoo_data.flatten([dict], fields)
+    output = list(result)[0]
     assert expected == output
 
 
@@ -102,7 +103,7 @@ def test_flatten(dict, fields, expected):
     ],
 )
 def test_flatten_many(list_dict, fields, expected):
-    output = odoo_data.flatten(list_dict, fields)
+    output = list(odoo_data.flatten(list_dict, fields))
     assert expected == output
 
 

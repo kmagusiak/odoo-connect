@@ -455,7 +455,7 @@ def export_data(
     records = model.search_read_dict(domain, fields)
 
     log.info('Export: done, cleaning data')
-    data = flatten(records, fields, expand_many=expand_many)
+    data = list(flatten(records, fields, expand_many=expand_many))
     if with_header:
         data.insert(0, [str(f) for f in fields])
     return data
@@ -574,7 +574,7 @@ def _flatten(value: List, field_levels: List[str]) -> List:
 
 
 @overload
-def _flatten(value: Dict, field_levels: List[str]) -> Union[Any, bool]:
+def _flatten(value: Dict, field_levels: List[str]) -> Any:
     ...
 
 
@@ -593,7 +593,7 @@ def _flatten(value, field_levels: List[str]) -> Any:
     return False  # default
 
 
-def _expand_many(data: List[Dict]) -> Iterator[Dict]:
+def _expand_many(data: Iterable[Dict]) -> Iterator[Dict]:
     for d in data:
         should_yield = True
         for k, v in d.items():
@@ -610,12 +610,12 @@ def _expand_many(data: List[Dict]) -> Iterator[Dict]:
             yield d
 
 
-def flatten(data: List[Dict], fields: List[str], expand_many=False) -> List[List]:
+def flatten(data: Iterable[Dict], fields: List[str], expand_many: bool = False) -> Iterator[List]:
     """Flatten each dict with values into a single row"""
     if expand_many:
-        data = list(_expand_many(data))
+        data = _expand_many(data)
     field_levels = [f.split('.') for f in fields]
-    return [[_flatten(d.get(fl[0]), fl[1:]) for fl in field_levels] for d in data]
+    return ([_flatten(d.get(fl[0]), fl[1:]) for fl in field_levels] for d in data)
 
 
 __all__ = [
