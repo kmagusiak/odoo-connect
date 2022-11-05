@@ -5,9 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 
-__doc__ = """
-JSON-RPC class for Odoo RPC.
-"""
+__doc__ = """RPC class for Odoo"""
 
 
 def urljoin(base: str, *parts) -> str:
