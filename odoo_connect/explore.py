@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from typing import Any, Callable, Dict, Iterable, List, Union
 
 import odoo_connect.format
@@ -8,7 +9,9 @@ __doc__ = """Interact more easily with Odoo records."""
 
 
 """Cache of read values"""
-GLOBAL_CACHE: Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]] = {}
+GLOBAL_CACHE: ContextVar[Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]]] = ContextVar(
+    "OdooExploreCache", default={}
+)
 
 
 class Instance:
@@ -235,14 +238,15 @@ class Instance:
         return self.browse(*ids)
 
     def __cache(self) -> Dict[int, Dict[str, Any]]:
-        model_cache = GLOBAL_CACHE.get(self.__model)
+        cache = GLOBAL_CACHE.get()
+        model_cache = cache.get(self.__model)
         if not model_cache:
-            GLOBAL_CACHE[self.__model] = model_cache = {}
+            cache[self.__model] = model_cache = {}
         return model_cache
 
     def invalidate_cache(self, ids=None):
         """Invalidate the cache for a set of ids or all the model"""
-        model_cache = GLOBAL_CACHE.get(self.__model)
+        model_cache = GLOBAL_CACHE.get().get(self.__model)
         if not model_cache:
             return
         if ids is None:

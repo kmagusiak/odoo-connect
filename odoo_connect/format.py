@@ -1,5 +1,6 @@
 import base64
 from collections import defaultdict
+from contextvars import ContextVar
 from datetime import date, datetime
 from typing import Any, Callable, Dict, Optional, Union, cast
 
@@ -17,7 +18,9 @@ NOT_FORMATTED_FIELDS = {
 }
 
 """Default formatters for models"""
-DEFAULT_FORMATTERS: Dict[OdooModel, "Formatter"] = {}
+DEFAULT_FORMATTERS: ContextVar[Dict[OdooModel, "Formatter"]] = ContextVar(
+    'OdooDefaultFormatters', default={}
+)
 
 
 def decode_default(value) -> Any:
@@ -143,7 +146,8 @@ class Formatter:
 
 def get_default_formatter(model: OdooModel) -> Formatter:
     """Get the default dict formatter function"""
-    formatter = DEFAULT_FORMATTERS.get(model)
+    locals = DEFAULT_FORMATTERS.get()
+    formatter = locals.get(model)
     if not formatter:
-        DEFAULT_FORMATTERS[model] = formatter = Formatter(model)
+        locals[model] = formatter = Formatter(model)
     return formatter
