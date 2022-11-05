@@ -62,6 +62,7 @@ class OdooClient:
     _username: str
     _password: str
     _uid: Optional[int]
+    context: Dict
 
     def __init__(
         self,
@@ -70,6 +71,7 @@ class OdooClient:
     ):
         """Create new connection."""
         self.url = url
+        self.context = {}
         self._database = database or ''
         self._models = {}
         self._version = {}
@@ -157,6 +159,8 @@ class OdooClient:
         """Execute a method on a model"""
         if not self._uid:
             raise RuntimeError('You must authenticate first')
+        if self.context and 'context' not in kw:
+            kw['context'] = self.context
         return self._call(
             "object",
             "execute_kw",
