@@ -1,6 +1,6 @@
 import logging
 import urllib.parse
-from typing import Optional
+from typing import Dict, Optional
 
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError  # noqa
 
@@ -20,6 +20,7 @@ def connect(
     password: Optional[str] = None,
     infer_parameters: bool = True,
     check_connection: bool = True,
+    context: Optional[Dict] = None,
     monodb: bool = False,
     **kw,
 ) -> OdooClient:
@@ -48,7 +49,7 @@ def connect(
     :return: Connection object to the Odoo instance
     """
     if kw:
-        logging.warning('Unknown connect() paramters: %s', kw.keys())
+        logging.warning('Unknown connect() paramters: %s', list(kw.keys()))
     if database == '@monodb':
         monodb = True
         database = None
@@ -94,6 +95,8 @@ def connect(
             database = client._find_default_database(monodb=monodb)
             check_connection = False  # no need, we already got a database
             client.database = database
+        if context:
+            client.context.update(context)
         if username:
             client.authenticate(username, password or '')
         elif check_connection:
