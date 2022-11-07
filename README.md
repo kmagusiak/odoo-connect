@@ -27,7 +27,7 @@ So the following code on the server, will add one to every line ordered
 quantity or fail and do nothing.
 However, ORM client libraries will perform multiple steps, on a failure,
 already executed code was committed. You can also end with race conditions
-where some other code set product_uom_qty to 0 before you increment it.
+where some other code sets product_uom_qty to 0 before you increment it.
 
 	lines = env['sale.order.line'].search([
 		('order_id.name', '=', 'S00001')
@@ -40,6 +40,9 @@ where some other code set product_uom_qty to 0 before you increment it.
 
 A separate package provides utilities to more easily extract data from Odoo.
 It also contains utility to get binary data (attachments) and reports.
+
+Since Odoo doesn't accept all kind of values, the *format* package will help
+with converting between user-expected values and values returned by Odoo.
 
 The following function will return a table-like (list of lists) structure
 with the requested data.
@@ -67,6 +70,10 @@ domains and fields. Note that this doesn't support groupping.
 		odoo_data.load_data(partner, batch, method='write')
 
 ## Explore
+
+Provides a simple abstraction for querying data with a local cache.
+It may be easier than executing and parsing a `read()`.
+Also, auto-completion for fields is provided in jupyter.
 
 	from odoo_connect.explore import explore
 	sale_order = explore(env['sale.order'])

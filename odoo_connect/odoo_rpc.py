@@ -175,7 +175,7 @@ class OdooClient:
         """Get a model instance
 
         :param model: Name of the model
-        :param check: Check if the model exists (default: no), if doesn't exist, return None
+        :param check: Check if the model exists (default: no), if doesn't exist, raise error
         :return: Proxy for the model functions
         """
         model = self._models.get(model_name)
@@ -329,7 +329,7 @@ class OdooModel:
         return repr(self.odoo) + "/" + self.model
 
     def fields(self, extended=False) -> Dict[str, dict]:
-        """Returns the fields of the model"""
+        """Return the fields of the model"""
         if not self._field_info or (extended and not self._field_info['id'].get('name')):
             attributes = (
                 [] if extended else ['string', 'type', 'readonly', 'required', 'store', 'relation']
