@@ -44,7 +44,7 @@ def get_attachment(model: OdooModel, id: int, field_name: str) -> bytes:
 
 
 def get_attachment(
-    model: OdooModel, id: int = 0, field_name: str = None, encoded_value: str = None
+    model: OdooModel, id: int = 0, field_name: str = '', encoded_value: Optional[str] = None
 ) -> bytes:
     if encoded_value is not None:
         return decode_binary(encoded_value)
@@ -235,13 +235,13 @@ def get_report(model: OdooModel, report_name: str, id: int, converter='pdf') -> 
 
 
 def make_batches(
-    data: Iterable[Dict], *, batch_size: int = 1000, group_by: str = None
+    data: Iterable[Dict], *, batch_size: int = 1000, group_by: str = ''
 ) -> Iterable[List[Dict]]:
     """Split an interable to a batched iterable
 
     :param data: The iterable
     :param batch_size: Target batch size (default: 1000)
-    :param group_by: field to group by (the value is kept in a single batch
+    :param group_by: field to group by (the value is kept in a single batch, can be empty)
     :return: An iterable of batches
     """
     batch: List[Dict] = []
@@ -273,7 +273,7 @@ def load_data(
     method: str = "load",
     method_row_type=None,
     fields: Optional[List[str]] = None,
-    formatter: Formatter = None,
+    formatter: Optional[Formatter] = None,
 ):
     """Load the data into the model.
 

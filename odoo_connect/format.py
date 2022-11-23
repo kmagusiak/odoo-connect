@@ -103,7 +103,7 @@ class Formatter:
     format_function: Dict[str, Callable[[Any], Any]]
     decode_function: Dict[str, Callable[[Any], Any]]
 
-    def __init__(self, model: OdooModel = None, *, lower_case_fields: bool = False):
+    def __init__(self, model: Optional[OdooModel] = None, *, lower_case_fields: bool = False):
         """New formatter
 
         :param model: The model for which the formatter is generated (initializes formatters)
@@ -114,7 +114,7 @@ class Formatter:
         self.model = model
         self.lower_case_fields = lower_case_fields
         self.field_map = {}
-        if not model:
+        if model is None:
             return
         # set the formats from the model
         functions = {

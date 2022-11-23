@@ -254,7 +254,7 @@ class OdooClient:
     @property
     def user(self) -> dict:
         """Get user information"""
-        if not self.is_connected:
+        if not self.is_connected():
             return {}
         data = self.get_model('res.users').read(
             self._uid,
