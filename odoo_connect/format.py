@@ -1,12 +1,16 @@
 import base64
 from collections import defaultdict
 from contextvars import ContextVar
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, Optional, Union, cast
 
 from .odoo_rpc import OdooModel
 
-__doc__ = """Formatting of fields for Odoo."""
+__doc__ = """Formatting of fields for Odoo.
+
+Use format functions to send data into Odoo and use decode functions
+to get data from Odoo.
+"""
 
 NOT_FORMATTED_FIELDS = {
     'display_name',
@@ -57,7 +61,10 @@ def format_default(v: Any):
 def format_datetime(v: Union[datetime, date, str]):
     """Format a datetime to insert into Odoo"""
     if isinstance(v, datetime):
-        # format ISO with a space an ignore millisenconds
+        # remove the timezone, use UTC
+        if v.tzinfo:
+            v = v.astimezone(timezone.utc).replace(tzinfo=None)
+        # format ISO with a space and ignore millisenconds
         return v.isoformat(sep=" ", timespec='seconds')
     if isinstance(v, str):
         return v.strip()[:19] or False
@@ -69,6 +76,8 @@ def format_datetime(v: Union[datetime, date, str]):
 def format_date(v: Union[datetime, date, str]):
     """Format a date to insert into Odoo"""
     if isinstance(v, datetime):
+        if v.tzinfo:
+            v = v.astimezone(timezone.utc)
         v = v.date()
     if isinstance(v, date):
         return v.isoformat()
