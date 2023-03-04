@@ -114,7 +114,7 @@ def default_rpc_handler():
             raise OdooMockedError('Cannot authenticate on %s with %s' % (database, username))
 
     @h.patch_execute_kw('res.users', 'read')
-    def read_user(id, fields=[]):
+    def read_user(id, fields=[], load=None):
         if not (0 < id < 10):
             return None  # not implemented for other id's
         result = {

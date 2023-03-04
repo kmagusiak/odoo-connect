@@ -128,8 +128,10 @@ class Instance:
         relation = prop.get('relation')
         if relation:
             model = self.__model.odoo.get_model(relation)
-            # value is either list[int] (many) or list[tuple[int, str]|False] (one)
-            ids = set(i for v in values for i in (v or []) if isinstance(i, int) and i)
+            # value is either list[int] (many) or int|False (one)
+            ids = set(
+                i for v in values if v and (vv := (v if isinstance(v, list) else [v])) for i in vv
+            )
             return Instance(model, list(ids))
         return values
 
@@ -143,7 +145,7 @@ class Instance:
         # an exists() check is not needed because read() will return only existing rows
         if not missing_ids:
             return self
-        for d in self.__model.read(list(missing_ids), list(fieldset)):
+        for d in self.__model.read(list(missing_ids), list(fieldset), load='raw'):
             id = d['id']
             if id in model_cache:
                 model_cache[id].update(d)
@@ -194,7 +196,7 @@ class Instance:
     def search(self, domain: List, **kw) -> "Instance":
         """Search for an instance"""
         fields = self._default_fields()
-        data = self.__model.search_read(domain, fields, **kw)
+        data = self.__model.search_read(domain, fields, load='raw', **kw)
         # add only new data, keep cache consistent
         model_cache = self.__cache()
         model_cache.update({d['id']: d for d in data if d['id'] not in model_cache})
@@ -218,7 +220,7 @@ class Instance:
         ids = self.__model.create(value_list)
         return self.browse(*ids)
 
-    def write(self, values: Dict[str, Any], format: bool = False):
+    def write(self, values: Dict[str, Any], *, format: bool = False):
         """Update the values of the current instance"""
         if not values:
             return

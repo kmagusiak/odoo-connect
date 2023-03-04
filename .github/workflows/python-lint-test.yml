@@ -23,7 +23,7 @@ jobs:
     strategy:
       matrix:
         # lowest, common (default ubuntu LTS), newest
-        python-version: ["3.7", "3.8", "3.10"]
+        python-version: ["3.7", "3.10", "3.11"]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}

@@ -7,11 +7,11 @@ def test_add_field(odoo_cli, odoo_json_rpc_handler):
     handler = odoo_json_rpc_handler
 
     @handler.patch_execute_kw('res.partner', 'read')
-    def read_partner(id, fields=[]):
+    def read_partner(id, fields=[], load=None):
         return [{'id': 1, 'name': 'test'}]
 
     @handler.patch_execute_kw('res.partner', 'search_read')
-    def read_search_partner(domain, fields=[]):
+    def read_search_partner(domain, fields=[], load=None):
         print(domain)
         data = [{'id': 1, 'name': 'test'}]
         if not fields:
@@ -57,7 +57,7 @@ def test_add_xml_id(odoo_cli, odoo_json_rpc_handler):
     handler = odoo_json_rpc_handler
 
     @handler.patch_execute_kw('ir.model.data', 'search_read')
-    def read_search_data(domain, fields=[]):
+    def read_search_data(domain, fields=[], load=None):
         print(domain)
         data = [{'id': 1, 'res_id': 4, 'model': 'res.partner', 'complete_name': 'test.myid'}]
         if not fields:

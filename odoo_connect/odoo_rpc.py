@@ -438,7 +438,7 @@ class OdooModel:
             field_info = self.fields().get(field_name, {})
             model_name = field_info.get('relation')
             if not model_name:
-                # not a reference field, skip it
+                # not a relation field, skip it
                 continue
 
             # simplify contents and get ids
@@ -454,7 +454,9 @@ class OdooModel:
             else:
                 for datum in data:
                     value = datum.get(field_name)
-                    if isinstance(value, list):
+                    if isinstance(value, int) and value:
+                        ids.add(value)
+                    elif isinstance(value, list):
                         assert len(value) == 2 and not isinstance(value[1], int)
                         datum[field_name] = value[0]
                         ids.add(value[0])
@@ -463,7 +465,7 @@ class OdooModel:
 
             # read the data from children
             model = self.odoo.get_model(model_name)
-            children_data = model.read(list(ids), list(child_fields))
+            children_data = model.read(list(ids), list(child_fields), load='raw')
             model.__read_dict_recursive(children_data, child_fields)
             children_data = {e['id']: e for e in children_data}
 
@@ -516,22 +518,24 @@ class OdooModel:
         :return: A list of found objects
         """
         fields = self.__prepare_dict_fields(fields)
-        data = self.search_read(domain, list(fields), **kwargs)
+        data = self.search_read(domain, list(fields), load='raw', **kwargs)
         return self.__read_dict_recursive(data, fields)
 
-    def read_group_dict(self, domain, aggregates, groupby, **kwargs):
+    def read_group_dict(
+        self, domain: List, aggregates: Optional[List], groupby: List[str], **kwargs
+    ):
         """Search read groupped data
 
         :param domain: The domain for the search
-        :param aggregates: The aggregates
+        :param aggregates: The aggregates (default: ['id'])
         :param groupby: Fields to group by
-        :return: A list of groupped date
+        :return: A list of groupped data
         """
-        groupby = self.__prepare_dict_fields(groupby)
-        groupby_list = list(groupby)
+        groupby_parsed = self.__prepare_dict_fields(groupby)
+        groupby_list = list(groupby_parsed)
         if not groupby_list:
             raise ValueError('Missing groupby values')
         kwargs['lazy'] = False
         data = self.read_group(domain, aggregates or ['id'], groupby_list, **kwargs)
         data = self.__read_dict_date(data, groupby_list)
-        return self.__read_dict_recursive(data, groupby)
+        return self.__read_dict_recursive(data, groupby_parsed)

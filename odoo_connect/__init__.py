@@ -69,8 +69,9 @@ def connect(
         if not database:
             # try to extract the database from the hostname
             # dbname.runbot*.odoo.com or dbname.dev.odoo.com
+            # except IP addresses
             name_split = (urlx.hostname or '').split('.')
-            if len(name_split) > 3:
+            if len(name_split) > 3 and not name_split[-1].isnumeric():
                 database = name_split[0]
         if not username and urlx.username:
             # read username and password from the url
