@@ -3,16 +3,21 @@ set -eu
 # Check directory
 cd "$(dirname "$0")"
 [ -d .git ] || cd ../..
+[ -d .git ]
+[ "$(basename "$0")" != 'commit-msg' ] || set -- commit-msg "$@"
 
 case "${1:-run}" in
 	run) ;;
+	commit-msg)
+		echo "Commit msg file: $2"
+		exit;;
 	install)
-		echo "Installing pre-commit"
-		(cd .git/hooks && ln -sf ../../pre-commit .)
+		echo "Installing pre-commit (and commit-msg)"
+		(cd .git/hooks && ln -sf ../../pre-commit pre-commit && ln -sf ../../pre-commit commit-msg)
 		exit;;
 	uninstall)
 		echo "Uninstalling pre-commit"
-		rm -f .git/hooks/pre-commit
+		rm -f .git/hooks/pre-commit .git/hooks/commit-msg
 		exit;;
 	*)
 		echo "Invalid option: $*"
