@@ -10,7 +10,7 @@ def odoo_cli_partner(odoo_cli, odoo_json_rpc_handler) -> Instance:
     for d in data:
         d['display_name'] = d['name']
 
-    def read_partner(ids, fields=[]):
+    def read_partner(ids, fields=[], load=None):
         if not fields:
             fields = data[0].keys()
         elif 'id' not in fields:
@@ -20,7 +20,7 @@ def odoo_cli_partner(odoo_cli, odoo_json_rpc_handler) -> Instance:
     handler.patch_execute_kw('res.partner', 'read')(read_partner)
 
     @handler.patch_execute_kw('res.partner', 'search_read')
-    def read_search_partner(domain, fields=[]):
+    def read_search_partner(domain, fields=[], load=None):
         print('read_search_partner', domain)
         return read_partner([1], fields=fields)
 
