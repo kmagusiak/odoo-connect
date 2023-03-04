@@ -37,7 +37,7 @@ where some other code sets product_uom_qty to 0 before you increment it.
 			line.product_uom_qty += 1
 
 A better way of doing something like this is to implement a function on Odoo
-side and call it. `lines.increment_uom([('product_uom_qty', '>', 1)])`.
+side and call it. `lines.increment_qty([('product_uom_qty', '>', 1)])`.
 
 ## Export and import data
 
@@ -71,6 +71,11 @@ domains and fields. Note that this doesn't support groupping.
 		odoo_data.add_fields(so, batch, 'name', ['id'])
 		# if you just plan to create(), you can skip adding ids
 		odoo_data.load_data(partner, batch, method='write')
+
+## Data types
+
+A small module provides functions to translate from JSON values to binary
+or date values.
 
 ## Explore
 
