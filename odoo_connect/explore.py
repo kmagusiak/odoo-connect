@@ -129,9 +129,8 @@ class Instance:
         if relation:
             model = self.__model.odoo.get_model(relation)
             # value is either list[int] (many) or int|False (one)
-            ids = set(
-                i for v in values if v and (vv := (v if isinstance(v, list) else [v])) for i in vv
-            )
+            lists = (v if isinstance(v, list) else [v] for v in values if v)
+            ids = set(i for ls in lists for i in ls)
             return Instance(model, list(ids))
         return values
 
