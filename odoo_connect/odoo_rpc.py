@@ -106,7 +106,9 @@ class OdooClient:
                 return dbs[0]
         except OdooServerError as e:
             log.debug('db.list call failed: %s', e)
-        # Fail
+        # Fail or default
+        if self.database:
+            return self.database
         raise OdooServerError('Cannot determine the database for [%s]' % self.url)
 
     def authenticate(self, username: str, password: str):

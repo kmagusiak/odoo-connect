@@ -90,10 +90,10 @@ def connect(
 
     # Create the connection
     try:
-        client = OdooClient(url=url, database=database)
+        client = OdooClient(url=url, database=database or 'odoo')
         if not database:
             database = client._find_default_database(monodb=monodb)
-            check_connection = False  # no need, we already got a database
+            check_connection = database == 'odoo'  # check if it's the default database
             client.database = database
         if context:
             client.context.update(context)
