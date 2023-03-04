@@ -1,6 +1,8 @@
 #!/bin/bash
 set -eu
+# Check directory
 cd "$(dirname "$0")"
+[ -d .git ] || cd ../..
 
 case "${1:-run}" in
 	run) ;;
@@ -17,9 +19,6 @@ case "${1:-run}" in
 		echo "Supported options: install, uninstall"
 		exit 1;;
 esac
-
-# Check directory
-[ -d .git ] || cd ../..
 
 # Run checks
 flake8
