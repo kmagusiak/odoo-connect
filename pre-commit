@@ -1,28 +1,32 @@
 #!/bin/bash
 set -eu
+# Check directory
 cd "$(dirname "$0")"
+[ -d .git ] || cd ../..
+[ -d .git ]
 
+pre_commit() {
+	flake8
+	black --check .
+	isort --check-only .
+}
+
+# Commands
 case "${1:-run}" in
-	run) ;;
+	run|lint)
+		pre_commit
+		echo "All good to commit"
+		;;
 	install)
 		echo "Installing pre-commit"
-		(cd .git/hooks && ln -sf ../../pre-commit .)
-		exit;;
+		cd .git/hooks
+		ln -sf ../../pre-commit pre-commit
+		;;
 	uninstall)
 		echo "Uninstalling pre-commit"
 		rm -f .git/hooks/pre-commit
-		exit;;
+		;;
 	*)
-		echo "Invalid option: $*"
-		echo "Supported options: install, uninstall"
-		exit 1;;
+		echo "Invalid argument: $*"
+		echo "Supported options: lint, install, uninstall"
 esac
-
-# Check directory
-[ -d .git ] || cd ../..
-
-# Run checks
-flake8
-black --check .
-isort --check-only .
-echo "All good to commit"
