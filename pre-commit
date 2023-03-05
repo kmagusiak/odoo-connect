@@ -11,8 +11,9 @@ pre_commit() {
 	isort --check-only .
 }
 
+# Commands
 case "${1:-run}" in
-	run)
+	run|lint)
 		pre_commit
 		echo "All good to commit"
 		;;
@@ -26,6 +27,6 @@ case "${1:-run}" in
 		rm -f .git/hooks/pre-commit
 		;;
 	*)
-		echo "Invalid command: $*"
-		echo "Supported options: install, uninstall"
+		echo "Invalid argument: $*"
+		echo "Supported options: lint, install, uninstall"
 esac
