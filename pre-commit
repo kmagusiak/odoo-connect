@@ -11,28 +11,19 @@ pre_commit() {
 	isort --check-only .
 }
 
-commit_msg() {
-	# $1 contains the file
-	true
-}
-
-case "$(basename "$0") ${1:-run}" in
-	"pre-commit run")
+case "${1:-run}" in
+	run)
 		pre_commit
 		echo "All good to commit"
 		;;
-	"commit-msg "*)
-		commit_msg "$1"
-		;;
-	"pre-commit install")
+	install)
 		echo "Installing pre-commit"
 		cd .git/hooks
 		ln -sf ../../pre-commit pre-commit
-		[ -f commit-msg ] || ln -sf ../../pre-commit commit-msg
 		;;
-	"pre-commit uninstall")
+	uninstall)
 		echo "Uninstalling pre-commit"
-		rm -f .git/hooks/pre-commit .git/hooks/commit-msg
+		rm -f .git/hooks/pre-commit
 		;;
 	*)
 		echo "Invalid command: $*"
