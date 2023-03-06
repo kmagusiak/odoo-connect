@@ -10,12 +10,19 @@ pre_commit() {
 	isort --check-only .
 }
 
+format() {
+	black .
+	isort .
+}
+
 # Commands
 case "${1:-run}" in
 	run|lint)
 		pre_commit
 		echo "All good to commit"
 		;;
+	format)
+		format;;
 	install)
 		echo "Installing pre-commit"
 		cd .git/hooks
