@@ -258,7 +258,7 @@ class OdooClient:
         """Get user information"""
         if not self.is_connected():
             return {}
-        data = self.get_model('res.users')._read(
+        data = self.get_model('res.users').read(
             self._uid,
             [
                 'login',
