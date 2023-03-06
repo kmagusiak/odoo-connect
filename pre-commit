@@ -2,13 +2,17 @@
 set -eu
 # Check directory
 cd "$(dirname "$0")"
-[ -d .git ] || cd ../..
-[ -d .git ]
+[[ "$0" != *.git/hooks/* ]] || cd ../..
 
 pre_commit() {
 	flake8
 	black --check .
 	isort --check-only .
+}
+
+format() {
+	black .
+	isort .
 }
 
 # Commands
@@ -17,6 +21,8 @@ case "${1:-run}" in
 		pre_commit
 		echo "All good to commit"
 		;;
+	format)
+		format;;
 	install)
 		echo "Installing pre-commit"
 		cd .git/hooks

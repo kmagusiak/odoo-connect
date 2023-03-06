@@ -144,7 +144,7 @@ class Instance:
         # an exists() check is not needed because read() will return only existing rows
         if not missing_ids:
             return self
-        for d in self.__model.read(list(missing_ids), list(fieldset), load='raw'):
+        for d in self.__model._read(list(missing_ids), list(fieldset)):
             id = d['id']
             if id in model_cache:
                 model_cache[id].update(d)
@@ -195,7 +195,7 @@ class Instance:
     def search(self, domain: List, **kw) -> "Instance":
         """Search for an instance"""
         fields = self._default_fields()
-        data = self.__model.search_read(domain, fields, load='raw', **kw)
+        data = self.__model._search_read(domain, fields, **kw)
         # add only new data, keep cache consistent
         model_cache = self.__cache()
         model_cache.update({d['id']: d for d in data if d['id'] not in model_cache})

@@ -465,7 +465,7 @@ class OdooModel:
 
             # read the data from children
             model = self.odoo.get_model(model_name)
-            children_data = model.read(list(ids), list(child_fields), load='raw')
+            children_data = model._read(list(ids), list(child_fields))
             model.__read_dict_recursive(children_data, child_fields)
             children_data = {e['id']: e for e in children_data}
 
@@ -480,6 +480,27 @@ class OdooModel:
                     v = datum.get(field_name)
                     datum[field_name] = (children_data.get(v) or {"id": v}) if v else {}
 
+        return data
+
+    def _read(self, ids: List[int], fields: List[str], **kwargs):
+        """Raw read() function"""
+        return self.read(ids, fields, load='raw', **kwargs)
+
+    def _search_read(self, domain: List, fields: List[str], **kwargs):
+        """Raw search_read() function"""
+        if self.odoo.major_version >= 15:
+            return self.search_read(domain, fields, load='raw', **kwargs)
+        # before v15, load argument is not supported
+        data = self.search_read(domain, fields, **kwargs)
+        for d in data:
+            for k, v in d.items():
+                if (
+                    isinstance(v, list)
+                    and len(v) == 2
+                    and isinstance(v[0], int)
+                    and isinstance(v[1], str)
+                ):
+                    d[k] = v[0]
         return data
 
     def read_dict(
@@ -502,7 +523,7 @@ class OdooModel:
             ids = [ids]
             single = True
         fields = self.__prepare_dict_fields(fields)
-        data = self.read(ids, list(fields))
+        data = self._read(ids, list(fields))
         result = self.__read_dict_recursive(data, fields)
         return result[0] if single else result
 
@@ -518,7 +539,7 @@ class OdooModel:
         :return: A list of found objects
         """
         fields = self.__prepare_dict_fields(fields)
-        data = self.search_read(domain, list(fields), load='raw', **kwargs)
+        data = self._search_read(domain, list(fields), **kwargs)
         return self.__read_dict_recursive(data, fields)
 
     def read_group_dict(
