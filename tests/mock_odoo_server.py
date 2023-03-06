@@ -98,7 +98,12 @@ def default_rpc_handler():
     @h.patch_generic
     def version(service, method, args):
         if service == 'common' and method == 'version':
-            return {"server_version": "15.0", "server_serie": "mocked"}
+            return {
+                "server_version": "16.0+e",
+                "server_version_info": [16, 0, 0, 'mock', 0, 'e'],
+                "server_serie": "16.0",
+                "protocol_version": "1",
+            }
 
     @h.patch_generic
     def authenticate(service, method, args):
