@@ -107,3 +107,11 @@ def connect(
         raise
     except (ConnectionError, IOError, OdooServerError) as e:
         raise OdooConnectionError(e)
+
+__all__ = [
+    "connect",
+    "OdooConnectionError",
+    "OdooClient",
+    "OdooModel",
+    "OdooServerError",    
+]
