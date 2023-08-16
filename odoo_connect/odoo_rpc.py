@@ -370,7 +370,6 @@ class OdooModel:
     def __read_dict_date(self, data, fields):
         """Transform dates into ISO-like format"""
         for field in fields:
-            mapper = None
             if field.endswith(':quarter'):
                 regex = re.compile(r'Q(\d) (\d+)')
 
@@ -412,22 +411,24 @@ class OdooModel:
                     date = range.get('from')
                     return date if date else v
 
-            if mapper:
-                raw_field = field.split(':', 1)[0]
-                has_range = self.odoo.major_version >= 15
-                for d in data:
-                    if has_range:
-                        d_range = d['__range'].get(raw_field)
-                    else:
-                        # parse the domain to get the range
-                        d_range = {}
-                        for e in d['__domain']:
-                            if isinstance(e, list) and len(e) == 3 and e[0] == raw_field:
-                                if e[1] == ">=" and 'from' not in d_range:
-                                    d_range['from'] = e[2]
-                                elif e[1] == "<" and 'to' not in d_range:
-                                    d_range['to'] = e[2]
-                    d[field] = mapper(d[field], d_range)
+            else:
+                continue
+
+            raw_field = field.split(':', 1)[0]
+            has_range = self.odoo.major_version >= 15
+            for d in data:
+                if has_range:
+                    d_range = d['__range'].get(raw_field)
+                else:
+                    # parse the domain to get the range
+                    d_range = {}
+                    for e in d['__domain']:
+                        if isinstance(e, list) and len(e) == 3 and e[0] == raw_field:
+                            if e[1] == ">=" and 'from' not in d_range:
+                                d_range['from'] = e[2]
+                            elif e[1] == "<" and 'to' not in d_range:
+                                d_range['to'] = e[2]
+                d[field] = mapper(d[field], d_range)
         return data
 
     def __read_dict_recursive(self, data, fields):
