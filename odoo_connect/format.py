@@ -12,7 +12,9 @@ Use format functions to send data into Odoo and use decode functions
 to get data from Odoo.
 """
 
+"""Fields that are not formatted, because they are not writeable"""
 NOT_FORMATTED_FIELDS = {
+    'id',
     'display_name',
     'write_date',
     'create_date',
@@ -28,7 +30,10 @@ DEFAULT_FORMATTERS: ContextVar[Dict[OdooModel, "Formatter"]] = ContextVar(
 
 
 def decode_default(value) -> Any:
-    """Decode a value from Odoo (identity function)"""
+    """Decode a value from Odoo"""
+    if value is False:
+        # odoo represents nulls as false
+        return None
     return value
 
 
@@ -49,6 +54,19 @@ def decode_binary(value) -> bytes:
     if not value:
         return b''
     return base64.b64decode(value)
+
+
+def decode_json(value):
+    """Odoo encodes the JSON value in results as a string"""
+    # the string contains single quotes, so we try to decode using ast
+    import ast
+
+    if value is False:
+        return None
+    try:
+        return ast.literal_eval(value)
+    except ValueError:
+        return value
 
 
 def format_default(v: Any):
@@ -94,6 +112,19 @@ def format_binary(v: Union[bytes, str]) -> str:
     return str(encoded, 'ascii')
 
 
+"""Transform type to tuple(formatter, decoder)"""
+_FORMAT_FUNCTIONS: dict[str, tuple[Callable, Callable]] = {
+    'datetime': (format_datetime, decode_datetime),
+    'date': (format_date, decode_date),
+    'binary': (format_binary, decode_binary),
+    'image': (format_binary, decode_binary),
+    'boolean': (bool, bool),
+    'integer': (int, decode_default),
+    'float': (float, decode_default),
+    'json': (format_default, decode_json),
+}
+
+
 class Formatter:
     """Format fields into a format expected by Odoo."""
 
@@ -113,18 +144,12 @@ class Formatter:
         self.decode_function = defaultdict(lambda: decode_default)
         self.model = model
         self.lower_case_fields = lower_case_fields
-        self.field_map = {}
+        self.field_map = {f: '' for f in NOT_FORMATTED_FIELDS}
         if model is None:
             return
         # set the formats from the model
-        functions = {
-            'datetime': (format_datetime, decode_datetime),
-            'date': (format_date, decode_date),
-            'binary': (format_binary, decode_binary),
-            'image': (format_binary, decode_binary),
-        }
         for field, info in model.fields().items():
-            formatter, decoder = functions.get(
+            formatter, decoder = _FORMAT_FUNCTIONS.get(
                 cast(str, info.get('type')), (format_default, decode_default)
             )
             if formatter is not format_default:
@@ -140,16 +165,12 @@ class Formatter:
         return name
 
     def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply formatting to each field"""
+        """Apply formatting to each field (python object to Odoo data)"""
         d_renamed = [(self.map_field_name(f), v) for f, v in d.items()]
-        return {
-            f: self.format_function[f](v)
-            for f, v in d_renamed
-            if f and f not in NOT_FORMATTED_FIELDS
-        }
+        return {f: self.format_function[f](v) for f, v in d_renamed if f}
 
     def decode_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply decoding to each field"""
+        """Apply decoding to each field (Odoo data to python object)"""
         return {f: self.decode_function[f](v) for f, v in d.items()}
 
 

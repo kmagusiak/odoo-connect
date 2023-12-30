@@ -123,4 +123,4 @@ def test_ex_write_format(odoo_cli_partner: Instance):
     inst = odoo_cli_partner.browse(1)
     assert inst.name == 'test'
     inst.write({'name': ''}, format=True)
-    assert inst.name is False
+    assert inst.name is None

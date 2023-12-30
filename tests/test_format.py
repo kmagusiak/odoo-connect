@@ -16,44 +16,48 @@ def test_binary_encoding():
     assert isinstance(original, bytes) and original == bin
 
 
-def test_binary_encoding_empty():
-    assert odoo_format.format_binary(b'') == ''
-
-
 @pytest.mark.parametrize(
-    "type_name,func,input,expected",
+    "type_name,input,expected",
     [
-        ('char', 'default', 'test', 'test'),
-        ('int', 'default', 3, 3),
-        ('date', 'date', datetime(2020, 2, 2, 3), "2020-02-02"),
-        ('date', 'date', date(2020, 2, 2), "2020-02-02"),
-        ('date', 'date', None, False),
-        ('datetime', 'datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
-        ('datetime', 'datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
-        ('datetime', 'datetime', date(2020, 2, 2), "2020-02-02 00:00:00"),
-        ('datetime', 'datetime', None, False),
-        ('binary', 'binary', b'', ''),
-        ('char', 'default', '', False),
+        ('char', 'test', 'test'),
+        ('integer', 3, 3),
+        ('date', datetime(2020, 2, 2, 3), "2020-02-02"),
+        ('date', date(2020, 2, 2), "2020-02-02"),
+        ('date', None, False),
+        ('datetime', datetime(2020, 2, 2, 3, microsecond=3), "2020-02-02 03:00:00"),
+        ('datetime', "2020-02-02 03:00:00.3", "2020-02-02 03:00:00"),
+        ('datetime', date(2020, 2, 2), "2020-02-02 00:00:00"),
+        ('datetime', None, False),
+        ('binary', b'', ''),
+        ('char', '', False),
+        ('char', None, False),
+        ('boolean', False, False),
+        ('integer', False, 0),
     ],
 )
-def test_format(type_name, func, input, expected):
-    formatter = getattr(odoo_format, "format_%s" % func)
+def test_format(type_name, input, expected):
+    ff = odoo_format._FORMAT_FUNCTIONS.get(type_name)
+    formatter = ff[0] if ff else odoo_format.format_default
     assert formatter(input) == expected, "Couldn't format %s" % type_name
 
 
 @pytest.mark.parametrize(
-    "type_name,func,input,expected",
+    "type_name,input,expected",
     [
-        ('char', 'default', 'test', 'test'),
-        ('int', 'default', 3, 3),
-        ('date', 'date', "2022-02-02", date(2022, 2, 2)),
-        ('date', 'date', False, None),
-        ('datetime', 'datetime', "2020-02-02 03:00:00", datetime(2020, 2, 2, 3)),
-        ('binary', 'binary', '', b''),
+        ('char', 'test', 'test'),
+        ('int', 3, 3),
+        ('date', "2022-02-02", date(2022, 2, 2)),
+        ('date', False, None),
+        ('datetime', "2020-02-02 03:00:00", datetime(2020, 2, 2, 3)),
+        ('binary', '', b''),
+        ('char', False, None),
+        ('boolean', False, False),
+        ('json', "{'a': 1}", {'a': 1}),
     ],
 )
-def test_decode(type_name, func, input, expected):
-    decoder = getattr(odoo_format, "decode_%s" % func)
+def test_decode(type_name, input, expected):
+    ff = odoo_format._FORMAT_FUNCTIONS.get(type_name)
+    decoder = ff[1] if ff else odoo_format.decode_default
     assert decoder(input) == expected, "Couldn't decode %s" % type_name
 
 
@@ -78,3 +82,13 @@ def test_decoder():
     print(d)
     assert d['d'] == date(2022, 1, 1)
     assert d['x'] == '2022-01-01'
+
+
+def test_formatter_lower_case():
+    f = odoo_format.Formatter(lower_case_fields=True)
+    assert f.map_field_name('OK') == 'ok'
+
+
+def test_formatter_ignored_fields():
+    f = odoo_format.Formatter()
+    assert f.format_dict({'id': 5, 'a': 1}) == {'a': 1}
