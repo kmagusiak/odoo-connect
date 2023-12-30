@@ -87,6 +87,7 @@ class OdooClient:
         """Initialize the session"""
         self.__json_url = urljoin(self.url, "jsonrpc")
         self.session = requests.Session()
+        self.session.headers.update({'User-Agent': 'odoo-connect (python)'})
 
     def _find_default_database(self, *, monodb=True) -> str:
         """Find the default database from the server or raise an exception"""

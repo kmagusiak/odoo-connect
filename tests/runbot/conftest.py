@@ -9,8 +9,9 @@ import odoo_connect
 
 @pytest.fixture(scope='session')
 def connect_params():
-    runbot_page = requests.get('https://runbot.odoo.com/')
-    odoo_url = "http://localhost/"
+    runbot_url = 'https://runbot.odoo.com/'
+    runbot_page = requests.get(runbot_url)
+    odoo_url = "http://localhost:8069/"
     version = "unknown"
     # we don't use (yet) any XML parsing to keep dependencies simple
     # find one of the following and select a URL
@@ -29,14 +30,22 @@ def connect_params():
             and 'build/html' not in m.group(4)
         ):
             odoo_url = m.group(4)
+            if odoo_url.startswith('/'):
+                # relative path, will redirect to server, find it
+                odoo_url = odoo_connect.odoo_rpc.urljoin(runbot_url, odoo_url)
+                resp = requests.head(odoo_url)
+                if resp.is_redirect:
+                    odoo_url = resp.next.url
+            else:
+                odoo_url = odoo_url.replace('http://', 'https://')
             break
-    odoo_url = odoo_url.replace('http://', 'https://')
     logging.info("Using odoo server %s: %s", version, odoo_url)
 
     return {
         'url': odoo_url,
         'username': 'admin',
         'password': 'admin',
+        'check_connection': False,
     }
 
 
