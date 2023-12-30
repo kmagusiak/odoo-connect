@@ -2,7 +2,7 @@ import base64
 from collections import defaultdict
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, Optional, Union, cast
+from typing import Any, Callable, Dict, Optional, Tuple, Union, cast
 
 from .odoo_rpc import OdooModel
 
@@ -113,7 +113,7 @@ def format_binary(v: Union[bytes, str]) -> str:
 
 
 """Transform type to tuple(formatter, decoder)"""
-_FORMAT_FUNCTIONS: dict[str, tuple[Callable, Callable]] = {
+_FORMAT_FUNCTIONS: Dict[str, Tuple[Callable, Callable]] = {
     'datetime': (format_datetime, decode_datetime),
     'date': (format_date, decode_date),
     'binary': (format_binary, decode_binary),

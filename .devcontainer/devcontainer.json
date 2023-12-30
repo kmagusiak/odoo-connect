@@ -1,6 +1,6 @@
 {
 	"name": "Odoo Connect",
-	"image": "mcr.microsoft.com/vscode/devcontainers/python:0-3",
+	"image": "mcr.microsoft.com/vscode/devcontainers/python:0-3.7",
 
 	"customizations": {
 		"vscode": {
