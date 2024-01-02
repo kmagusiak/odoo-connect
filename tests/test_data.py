@@ -131,7 +131,7 @@ def test_export(odoo_cli):
     assert len(data) > 0, "No data"
     assert data.schema[0]['type'] == "char", "Invalid login type"
     assert data.column_names == ['login']
-    assert data.get_sql_columns() == [('login', 'varchar')]
+    assert str(data.get_sql_columns()[0]) == 'login varchar'
 
 
 def test_batches():

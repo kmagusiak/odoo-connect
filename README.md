@@ -73,7 +73,7 @@ with io.StringIO(newline='') as f:
     w = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     w.writerows(all_data.to_csv())
 all_data.to_pandas()  # as a data frame
-all_data.to_sql(con, 'table_name')  # create a table
+all_data.to_dbapi(con, 'table_name')  # create a table
 
 # Import data using Odoo's load() function
 odoo_data.load_data(so, data)

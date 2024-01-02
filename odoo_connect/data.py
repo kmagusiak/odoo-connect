@@ -178,6 +178,17 @@ def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
 
 
 @dataclass
+class ColumnSpec:
+    """Column specification for SQL tables"""
+
+    name: str
+    typ: str
+
+    def __str__(self) -> str:
+        return f"{self.name} {self.typ}"
+
+
+@dataclass
 class ExportData:
     """Exported data from Odoo"""
 
@@ -200,13 +211,14 @@ class ExportData:
         for d in self.data:
             yield [str(v) if v is not None else '' for v in d]
 
-    def to_pandas(self):
+    def to_pandas(self, *, normalize_names: bool = True):
         """Create a pandas DataFrame"""
         import pandas
 
-        return pandas.DataFrame(self.data, columns=self.column_names)
+        columns = [c.name for c in self.get_sql_columns()] if normalize_names else self.column_names
+        return pandas.DataFrame(self.data, columns=columns)
 
-    def to_sql(self, con, table_name: str, *, only_data: bool = False, drop: bool = False):
+    def to_dbapi(self, con, table_name: str, *, only_data: bool = False, drop: bool = False):
         """Write the data to an SQL database
 
         :param con: The connection or transaction DBAPI (uses execute and executemany)
@@ -219,20 +231,20 @@ class ExportData:
             # create or replace table
             if drop:
                 con.execute(f"drop table if exists {table_name}")
-            con.execute(f"create table {table_name}({', '.join(' '.join(cs) for cs in colspecs)})")
+            con.execute(f"create table {table_name}({', '.join(colspecs)})")
         elif drop:
             # truncate table
             con.execute(f"truncate table {table_name}")
         # insert data
         con.executemany(
             f"""insert into {table_name}
-            ({', '.join(cs[0] for cs in colspecs)})
+            ({', '.join(cs.name for cs in colspecs)})
             values (?{',?' * (len(colspecs) - 1)})
             """,
             self.data,
         )
 
-    def get_sql_columns(self) -> List[Tuple[str, str]]:
+    def get_sql_columns(self) -> List[ColumnSpec]:
         """Get the list of tuples (normalized_column_name, column_type) to write into a table"""
         type_to_sql = {
             'binary': 'binary',
@@ -249,9 +261,9 @@ class ExportData:
             'monetary': 'decimal(10, 2)',
         }
         return [
-            (
-                info['name'].replace('.', '_').lower(),
-                type_to_sql.get(str(info.get('type')), 'varchar'),
+            ColumnSpec(
+                name=info['name'].replace('.', '_').lower(),
+                typ=type_to_sql.get(str(info.get('type')), 'varchar'),
             )
             for info in self.schema
         ]
