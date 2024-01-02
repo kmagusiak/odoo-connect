@@ -122,3 +122,11 @@ def test_flatten_expand_many():
         )
     )
     assert len(expanded) == 12
+
+
+def test_export(odoo_cli):
+    model = odoo_cli['res.users']
+    data = odoo_data.export_data(model, [], ['login'])
+    print(data.schema)
+    assert len(data) > 0, "No data"
+    assert data.schema[0]['type'] == "char", "Invalid login type"

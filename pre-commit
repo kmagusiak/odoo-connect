@@ -10,6 +10,11 @@ pre_commit() {
 	isort --check-only .
 }
 
+lint() {
+	pre_commit
+	mypy --install-types --non-interactive .
+}
+
 format() {
 	black .
 	isort .
@@ -17,10 +22,12 @@ format() {
 
 # Commands
 case "${1:-run}" in
-	run|lint)
+	run)
 		pre_commit
 		echo "All good to commit"
 		;;
+	lint)
+		lint;;
 	format)
 		format;;
 	install)

@@ -1,237 +1,18 @@
 import json
 import logging
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union, cast, overload
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, cast
 
-from .format import Formatter, decode_binary
-from .odoo_rpc import OdooClient, OdooModel, urljoin
+from .format import Formatter
+from .odoo_rpc import OdooModel, urljoin
 
 __doc__ = """Export and import data from Odoo.
 
-## Data
-To download values, use `export_data` which will return a table-like structure.
+To download values, use `export_data` for a flat tabular format.
 To import, you can use `load_data` to upload data into Odoo.
 Alternatively, you can use the formatter to prepare data for upload and
 then call create or write methods.
-
-## Attachments
-Get attachments and read binary values.
-
-## Reports
-Generate a report.
 """
-
-
-#######################################
-# ATTACHMENTS
-
-
-@overload
-def get_attachment(model: OdooModel, id: int) -> bytes:
-    """Get attachment by ID"""
-    ...
-
-
-@overload
-def get_attachment(model: OdooModel, *, encoded_value: str) -> bytes:
-    """Get attachment from base64 encoded value"""
-    ...
-
-
-@overload
-def get_attachment(model: OdooModel, id: int, field_name: str) -> bytes:
-    """Get attachment from a field in an object by id"""
-    ...
-
-
-def get_attachment(
-    model: OdooModel, id: int = 0, field_name: str = '', encoded_value: Optional[str] = None
-) -> bytes:
-    if encoded_value is not None:
-        return decode_binary(encoded_value)
-    if not id:
-        return b''
-    # we read an attachment by id
-    if not field_name:
-        return get_attachments(model.odoo, [id])[id]
-    # if we have a field name, decode the value or get the ID
-    field_info = model.fields().get(field_name, {})
-    record = model.read(id, [field_name])
-    value = record[0][field_name]
-    if field_info.get("relation") == "ir.attachment":
-        if field_info.get("type") != "many2one":
-            raise RuntimeError(
-                "Field %s is not a many2one, here are the values: %s" % (field_name, value)
-            )
-        if not value:
-            return b''
-        value = value[0]
-    elif field_info.get("type") != "binary":
-        raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
-    if isinstance(value, int):
-        return get_attachment(model, value)
-    return decode_binary(value)
-
-
-def get_attachments(odoo: OdooClient, ids: List[int]) -> Dict[int, bytes]:
-    """Get a list of tuples (name, raw_bytes) from ir.attachment by ids
-
-    :param odoo: Odoo client
-    :param ids: List of ids of attachments
-    :return: Dict id -> raw_bytes
-    """
-    data = odoo['ir.attachment'].read(ids, ['datas'])
-    return {r['id']: decode_binary(r['datas']) for r in data}
-
-
-def list_attachments(
-    model: OdooModel, ids: List[int], *, domain=[], fields=[], generate_access_token=False
-) -> List[Dict]:
-    """List attachments
-
-    We search all attachments linked to the model and ids.
-    All attachments, no matter if they have a res_field or not are read.
-    We read the id, name, res_id, res_field.
-    Special field names: public_url (generate public URL), datas (contents).
-
-    :param model: The model
-    :param ids: The record ids to filter on
-    :param domain: Additional domain
-    :param fields: Additional fields to read
-    :param generate_access_token: Generate access token for the found documents
-    :return: List of read properties from the attachments (id, name, res_field, ...)
-    """
-    url_field = None
-    if 'public_url' in fields:
-        url_field = 'public_url'
-        fields += ['website_url', 'url', 'public', 'access_token']
-    fields = list({'id', 'name', 'res_id', 'res_field', *fields} - {url_field})
-    # Get the data
-    if model.model == 'ir.attachment':
-        attachments = model
-        data = attachments.search_read(
-            [
-                ('id', 'in', ids),
-            ]
-            + domain,
-            fields,
-        )
-    else:
-        attachments = model.odoo['ir.attachment']
-        data = attachments.search_read(
-            [
-                ('res_model', '=', model.model),
-                ('res_id', 'in', ids),
-                ('id', '!=', 0),  # to get all res_field
-            ]
-            + domain,
-            fields,
-        )
-    # Get contents
-    if 'datas' in fields:
-        for d in data:
-            d['datas'] = decode_binary(d['datas']) if d['datas'] else False
-    # Generate access tokens
-    if generate_access_token and data:
-        tokens = attachments.execute('generate_access_token', [d['id'] for d in data])
-        for d, token in zip(data, tokens):
-            d['access_token'] = token
-    # Compute a full url (false when not accessible)
-    if url_field:
-
-        def attachment_url(d, _model_name, _id):
-            url = d.get('url') or d.get('website_url')
-            if url and d.get('public'):
-                return url
-            if url and d.get('access_token'):
-                url += ('&' if '?' in url else '?') + 'access_token=' + d.get('access_token')
-                return url
-            return False
-
-        add_url(attachments, data, url_field=url_field, build_url=attachment_url)
-    return data
-
-
-def _download_content(
-    odoo: OdooClient, url: str, *, params: Dict = {}, access_token: Optional[str] = None
-) -> bytes:
-    """Download contents from a URL"""
-    # In the implementation, the session is authenticated.
-    session = getattr(odoo, 'session', None)
-    if not session:
-        raise RuntimeError('Odoo client must have a session to download contents')
-
-    url = urljoin(odoo.url, url)
-    params = {}
-    if access_token:
-        params = {**params, 'access_token': access_token}
-    req = session.get(url, params=params)
-    req.raise_for_status()
-    return req.content
-
-
-def download_content(
-    model: OdooModel,
-    id: int,
-    field_name: Optional[str] = None,
-    *,
-    access_token: Optional[str] = None,
-) -> bytes:
-    """Download contents from /web"""
-    if field_name:
-        url = f"/web/content/{model.model}/{id}/{field_name}"
-    else:
-        url = f"/web/content/{id}"
-    return _download_content(model.odoo, url, access_token=access_token)
-
-
-def download_image(
-    model: OdooModel,
-    id: int,
-    field_name: Optional[str] = None,
-    *,
-    dimensions=None,
-    access_token: Optional[str] = None,
-):
-    """Download an image from /web"""
-    if field_name:
-        url = f"/web/image/{model.model}/{id}/{field_name}"
-    else:
-        url = f"/web/image/{id}"
-    if dimensions:
-        url += "/%dx%d" % dimensions
-    return _download_content(model.odoo, url, access_token=access_token)
-
-
-#######################################
-# REPORTS
-
-
-def list_reports(model: OdooModel) -> List[Dict]:
-    """List of reports from a model"""
-    return model.odoo['ir.actions.report'].search_read(
-        [('model', '=', model.model)], ['name', 'report_type', 'report_name']
-    )
-
-
-def get_report(model: OdooModel, report_name: str, id: int, converter='pdf') -> bytes:
-    """Generate and download a report
-
-    :param model: Odoo model
-    :param reportname: The name of the report
-    :param id: The id of the object
-    :param converter: The output type (default: pdf)
-    :return: Bytes of the report
-    """
-    # We need to use the session, because there is no public API since v14 to
-    # render a report and get the bytes.
-    if converter.startswith('qweb-'):
-        converter = converter[5:]
-    url = f"/report/{converter}/{report_name}/{id}"
-    return _download_content(model.odoo, url)
-
-
-#######################################
-# IMPORT AND EXPORT
 
 
 def make_batches(
@@ -312,7 +93,8 @@ def load_data(
         data = [formatter.format_dict(d) for d in data]
     elif method_row_type == list:
         data, fields = __convert_to_type_list(data, fields)
-        data = [[formatter.format_function[fields[i]](v) for i, v in enumerate(d)] for d in data]
+        formatter_functions = [formatter.format_function[f] for f in fields]
+        data = [[ff(v) for ff, v in zip(formatter_functions, d)] for d in data]
     else:
         raise Exception('Unsupported method row type: %s' % method_row_type)
 
@@ -395,70 +177,171 @@ def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
     }
 
 
+@dataclass
+class ExportData:
+    """Exported data from Odoo"""
+
+    schema: List[Dict]
+    data: List[List]
+
+    @property
+    def column_names(self):
+        return [h['name'] for h in self.schema]
+
+    def to_dicts(self) -> Iterable[Dict]:
+        """Return the data as dicts"""
+        fields = self.column_names
+        return (dict(zip(fields, d)) for d in self.data)
+
+    def to_csv(self, with_header=True) -> Iterable[List[str]]:
+        """Return the data for writing a csv file"""
+        if with_header:
+            yield self.column_names
+        for d in self.data:
+            yield [str(v) if v is not None else '' for v in d]
+
+    def to_pandas(self):
+        """Create a pandas DataFrame"""
+        import pandas
+
+        return pandas.DataFrame(self.data, columns=self.column_names)
+
+    def to_sql(self, con, table_name: str, *, only_data: bool = False, drop: bool = False):
+        """Write the data to an SQL database
+
+        :param con: The connection or transaction DBAPI (uses execute and executemany)
+        :param table_name: The name of the table
+        :param only_data: If True, only append data
+        :param drop: If True, either drop the table or truncate it
+        """
+        colspecs = self.get_sql_columns()
+        if not only_data:
+            # create or replace table
+            if drop:
+                con.execute(f"drop table if exists {table_name}")
+            con.execute(f"create table {table_name}({', '.join(' '.join(cs) for cs in colspecs)})")
+        elif drop:
+            # truncate table
+            con.execute(f"truncate table {table_name}")
+        # insert data
+        con.executemany(
+            f"""insert into {table_name}
+            ({', '.join(cs[0] for cs in colspecs)})
+            values (?{',?' * (len(colspecs) - 1)})
+            """,
+            self.data,
+        )
+
+    def get_sql_columns(self) -> List[Tuple[str, str]]:
+        """Get the list of tuples (normalized_column_name, column_type) to write into a table"""
+        type_to_sql = {
+            'binary': 'binary',
+            'boolean': 'boolean',
+            'char': 'varchar',
+            'selection': 'varchar',
+            'date': 'date',
+            'datetime': 'datetime',
+            'float': 'float',
+            'integer': 'integer',
+            'many2many': 'varchar',
+            'one2many': 'varchar',
+            'many2one': 'int',
+            'monetary': 'decimal(10, 2)',
+        }
+        return [
+            (
+                info['name'].replace('.', '_').lower(),
+                type_to_sql.get(str(info.get('type')), 'varchar'),
+            )
+            for info in self.schema
+        ]
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __str__(self) -> str:
+        return f"ExportData{self.column_names}({len(self.data)} rows)"
+
+
+def fields_from_export(model: OdooModel, export_name: str) -> List[str]:
+    """Return the list of fields in ir.exports"""
+    fields = model.odoo['ir.exports.line'].search_read(
+        [
+            ('export_id.name', '=', export_name),
+            ('export_id.resource', '=', model.model),
+        ],
+        ['name'],
+    )
+    fields = [f['name'].replace('/', '.') for f in fields]
+    if not fields:
+        raise ValueError('No fields to export')
+    return fields
+
+
+def domain_from_filter(model: OdooModel, filter_name: str) -> Dict:
+    """Return a tuple (domain, kwargs for search) from a filter name"""
+    filter_data = model.odoo['ir.filters'].search_read_dict(
+        [
+            ('name', '=', filter_name),
+            ('model_id', '=', model.model),
+        ],
+        ['domain', 'context', 'sort'],
+    )
+    if not filter_data:
+        raise ValueError('Filter not found')
+    r = {'domain': filter_data['domain']}
+    if filter_data.get('sort'):
+        r['order'] = json.loads(filter_data.get('sort'))
+    if filter_data.get('context'):
+        r['context'] = json.loads(filter_data.get('context'))
+    return r
+
+
 def export_data(
     model: OdooModel,
-    filter_or_domain: Union[str, List],
-    export_or_fields: Union[str, List[str]],
-    with_header: bool = True,
+    domain: List,
+    fields: List[str],
+    *,
+    formatter: Optional[Formatter] = None,
     expand_many: bool = False,
-) -> List[List]:
+) -> ExportData:
     """Export data into a tabular format
 
     :param model: Odoo model
-    :param filter_or_domain: Either a domain or an ir.filer name
+    :param filter_or_domain: Either a domain TODO update desc
+        or an ir.filters name
     :param export_or_fields: Either a list of fields (like is search_read_dict)
         or an ir.exports name
-    :param with_header: Include the header in the result (default: True)
+    :param formatter: The formatter to use to decode data
     :param expand_many: Flatten lists embedded in the result (default: False)
     :return: List of rows with data
     """
     log = logging.getLogger(__name__)
-    odoo = model.odoo
-    kwargs = {}
 
-    if isinstance(filter_or_domain, str):
-        log.debug('Get the filter from Odoo: %s', filter_or_domain)
-        filter_data = odoo['ir.filters'].search_read_dict(
-            [
-                ('name', '=', filter_or_domain),
-                ('model_id', '=', model.model),
-            ],
-            ['domain', 'context', 'sort'],
-        )
-        if not filter_data:
-            raise ValueError('Filter not found')
-        domain = filter_data.get('domain')
-        if filter_data.get('sort'):
-            kwargs['order'] = json.loads(filter_data.get('sort'))
-        if filter_data.get('context'):
-            kwargs['context'] = json.loads(filter_data.get('context'))
-    else:
-        domain = filter_or_domain
+    if formatter is None:
+        log.debug('Export: setup field decoder')
+        formatter = Formatter(model)
+        # fetch field types for related fields
+        for field in fields:
+            fparts = field.split('.')
+            if formatter.get_type(field) or len(fparts) < 2:
+                continue
+            p_model = model
+            for i, p in enumerate(fparts, 1):
+                p_info = p_model.fields().get(p, {})
+                p_model_name = p_info.get('relation')
+                if not p_model_name:
+                    break  # not found
+                p_model = p_model.odoo[p_model_name]
+                formatter.load_from_model(p_model, prefix='.'.join(fparts[:i]))
+    field_infos = [{**formatter.field_info.get(field, {}), "name": field} for field in fields]
 
-    if isinstance(export_or_fields, str):
-        log.debug('Get the export lines: %s', export_or_fields)
-        fields = odoo['ir.exports.line'].search_read(
-            [
-                ('export_id.name', '=', export_or_fields),
-                ('export_id.resource', '=', model.model),
-            ],
-            ['name'],
-        )
-        fields = [f['name'].replace('/', '.') for f in fields]
-    else:
-        log.debug('List of fields to export: %s', export_or_fields)
-        fields = export_or_fields
-    if not fields:
-        raise ValueError('No fields to export')
-
-    log.info('Export: execute search on %s', model.model)
+    log.info('Export: search and read data')
     records = model.search_read_dict(domain, fields)
 
-    log.info('Export: done, cleaning data')
-    data = list(flatten(records, fields, expand_many=expand_many))
-    if with_header:
-        data.insert(0, [str(f) for f in fields])
-    return data
+    log.info('Export: cleaning data')
+    data = list(flatten(records, fields, formatter=formatter, expand_many=expand_many))
+    return ExportData(field_infos, data)
 
 
 def add_fields(
@@ -568,28 +451,13 @@ def add_url(
             raise TypeError('Cannot append the url to %s' % type(row))
 
 
-@overload
-def _flatten(value: List, field_levels: List[str]) -> List:
-    ...
-
-
-@overload
-def _flatten(value: Dict, field_levels: List[str]) -> Any:
-    ...
-
-
-@overload
-def _flatten(value: Any, field_levels: List[str]) -> Any:
-    ...
-
-
-def _flatten(value, field_levels: List[str]) -> Any:
-    if not field_levels:
+def _flatten(value, access: List[str]) -> Any:
+    if not access:
         return value
-    if isinstance(value, list):
-        return [_flatten(i, field_levels) for i in value]
     if isinstance(value, dict):
-        return _flatten(value.get(field_levels[0]), field_levels[1:])
+        return _flatten(value.get(access[0]), access[1:])
+    if isinstance(value, list):
+        return [_flatten(i, access) for i in value]
     return False  # default
 
 
@@ -610,20 +478,25 @@ def _expand_many(data: Iterable[Dict]) -> Iterator[Dict]:
             yield d
 
 
-def flatten(data: Iterable[Dict], fields: List[str], expand_many: bool = False) -> Iterator[List]:
+def flatten(
+    data: Iterable[Dict],
+    fields: List[str],
+    *,
+    formatter: Optional[Formatter] = None,
+    expand_many: bool = False,
+) -> Iterator[List]:
     """Flatten each dict with values into a single row"""
     if expand_many:
         data = _expand_many(data)
     field_levels = [f.split('.') for f in fields]
-    return ([_flatten(d.get(fl[0]), fl[1:]) for fl in field_levels] for d in data)
+    result = ([_flatten(d, fl) for fl in field_levels] for d in data)
+    if formatter is not None:
+        decoders = [formatter.decode_function[f] for f in fields]
+        result = ([dec(v) for dec, v in zip(decoders, r)] for r in result)
+    return result
 
 
 __all__ = [
-    'get_attachment',
-    'get_attachments',
-    'list_attachments',
-    'get_report',
-    'list_reports',
     'Formatter',
     'make_batches',
     'load_data',

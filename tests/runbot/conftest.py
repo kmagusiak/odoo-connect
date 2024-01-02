@@ -10,7 +10,7 @@ import odoo_connect
 def connect_params():
     # runbot is no longer accessible for jsonrpc,
     # try to get the server from the environment
-    odoo_url = os.environ.get("ODOO_URL", "http://localhost:8069/")
+    odoo_url = os.environ.get("ODOO_URL", "http://admin@localhost:8069/")
     version = "unknown"
     logging.info("Using odoo server %s: %s", version, odoo_url)
 

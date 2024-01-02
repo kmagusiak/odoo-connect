@@ -118,6 +118,33 @@ def default_rpc_handler():
                 return 2
             raise OdooMockedError('Cannot authenticate on %s with %s' % (database, username))
 
+    @h.patch_execute_kw('res.users', 'fields_get')
+    def field_get_user(allfields=[], attributes=[]):
+        base = {
+            "string": "?",
+            "type": "char",
+            "readonly": False,
+            "required": False,
+            "store": True,
+            "relation": False,
+        }
+        return {
+            'id': {**base, "string": "ID", "type": 'int'},
+            'login': {**base, "string": "Login"},
+            'name': {**base, "string": "Name"},
+            'partner_id': {**base, "string": "ID", "type": 'many2one', "relation": "res.partner"},
+        }
+
+    @h.patch_execute_kw('res.users', 'search_read')
+    def read_search_partner(domain, fields=[], load=None):
+        print(domain)
+        data = [{'id': 1, 'name': 'test', 'login': 'admin', 'partner_id': 1}]
+        if not fields:
+            return data
+        if 'id' not in fields:
+            fields += 'id'
+        return [{k: v for k, v in d.items() if k in fields} for d in data]
+
     @h.patch_execute_kw('res.users', 'read')
     def read_user(id, fields=[], load=None):
         if not (0 < id < 10):

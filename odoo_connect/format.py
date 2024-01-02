@@ -14,7 +14,7 @@ to get data from Odoo.
 
 """Fields that are not formatted, because they are not writeable"""
 NOT_FORMATTED_FIELDS = {
-    'id',
+    # 'id',  # not removed because we need it to match records
     'display_name',
     'write_date',
     'create_date',
@@ -67,6 +67,17 @@ def decode_json(value):
         return ast.literal_eval(value)
     except ValueError:
         return value
+
+
+def decode_relation(value):
+    """Decode a relation, cast it into its id"""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, dict):
+        value = value.get('id', value)
+    if isinstance(value, list):
+        return [decode_relation(v) for v in value]
+    return decode_default(value)
 
 
 def format_default(v: Any):
@@ -130,32 +141,57 @@ class Formatter:
 
     """Transformations to apply to source fields.
     Use an empty string to mask some of them."""
+    model: Optional[OdooModel] = None
     field_map: Dict[str, str]
+    field_info: Dict[str, Dict]
     format_function: Dict[str, Callable[[Any], Any]]
     decode_function: Dict[str, Callable[[Any], Any]]
+    lower_case_fields: bool = False
 
-    def __init__(self, model: Optional[OdooModel] = None, *, lower_case_fields: bool = False):
+    def __init__(
+        self,
+        model: Optional[OdooModel] = None,
+        *,
+        lower_case_fields: bool = False,
+        decode_relations: bool = True,
+    ):
         """New formatter
 
         :param model: The model for which the formatter is generated (initializes formatters)
         :param lower_case_fields: Whether to transform source fields into lower-case
+        :param decode_relations: Decode relations as int
         """
         self.format_function = defaultdict(lambda: format_default)
         self.decode_function = defaultdict(lambda: decode_default)
-        self.model = model
         self.lower_case_fields = lower_case_fields
         self.field_map = {f: '' for f in NOT_FORMATTED_FIELDS}
-        if model is None:
-            return
-        # set the formats from the model
+        self.field_info = {}
+        if model is not None:
+            self.load_from_model(model, decode_relations=decode_relations)
+
+    def load_from_model(
+        self, model: OdooModel, *, prefix: Optional[str] = None, decode_relations: bool = True
+    ):
+        """Load fields from an Odoo model"""
+        # set the default model
+        if self.model is None and prefix is None:
+            self.model = model
+        # add formatters and decoders for fields
         for field, info in model.fields().items():
-            formatter, decoder = _FORMAT_FUNCTIONS.get(
-                cast(str, info.get('type')), (format_default, decode_default)
-            )
+            field_name = field if prefix is None else f"{prefix}.{field}"
+            field_type = cast(str, info.get('type'))
+            self.field_info[field_name] = info
+            formatter, decoder = _FORMAT_FUNCTIONS.get(field_type, (format_default, decode_default))
             if formatter is not format_default:
-                self.format_function.setdefault(field, formatter)
+                self.format_function.setdefault(field_name, formatter)
             if decoder is not decode_default:
-                self.decode_function.setdefault(field, decoder)
+                self.decode_function.setdefault(field_name, decoder)
+            elif '2' in field_type and decode_relations:
+                self.decode_function.setdefault(field_name, decode_relation)
+
+    def get_type(self, name: str) -> Optional[str]:
+        """Get the type from a formatter"""
+        return self.field_info.get(name, {}).get('type')
 
     def map_field_name(self, name: str) -> str:
         """Transform a source field name into model's name"""

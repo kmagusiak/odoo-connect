@@ -76,7 +76,7 @@ def connect(
         if not username and urlx.username:
             # read username and password from the url
             username = urlx.username
-            password = urlx.password
+            password = urlx.password or password
         if not password and username:
             # copy username to password when not set
             password = username

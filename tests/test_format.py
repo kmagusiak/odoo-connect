@@ -91,4 +91,4 @@ def test_formatter_lower_case():
 
 def test_formatter_ignored_fields():
     f = odoo_format.Formatter()
-    assert f.format_dict({'id': 5, 'a': 1}) == {'a': 1}
+    assert f.format_dict({'write_uid': 5, 'a': 1}) == {'a': 1}

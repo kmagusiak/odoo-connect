@@ -8,9 +8,11 @@ from . import mock_odoo_server
 @pytest.fixture(scope='function')
 def connect_params(httpserver, odoo_json_rpc_handler):
     # use odoo_json_rpc_handler so it is set up
+    assert odoo_json_rpc_handler is not None
     return {
         'url': httpserver.url_for('/'),
         'username': 'admin',
+        'password': 'admin',
         'database': 'odoo',
     }
 

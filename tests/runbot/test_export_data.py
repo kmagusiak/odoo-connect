@@ -8,5 +8,5 @@ def test_export(odoo_session):
     fields = ['name', 'parent_id.name']
     data = odoo_data.export_data(model, [('id', '<', 10)], fields)
     pprint(data)
-    assert fields == data[0]
-    assert all(len(fields) == len(row) for row in data)
+    assert fields == data.column_names
+    assert all(len(fields) == len(row) for row in data.data)

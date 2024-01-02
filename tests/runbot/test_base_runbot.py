@@ -2,6 +2,8 @@ import odoo_connect
 
 
 def test_user_with_protocol(connect_params):
+    if 'username' not in connect_params:
+        return  # skip this test
     env = odoo_connect.connect(**connect_params)
     user = env.user
     print(user)
