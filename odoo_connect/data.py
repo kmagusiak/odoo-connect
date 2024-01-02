@@ -231,7 +231,7 @@ class ExportData:
             # create or replace table
             if drop:
                 con.execute(f"drop table if exists {table_name}")
-            con.execute(f"create table {table_name}({', '.join(colspecs)})")
+            con.execute(f"create table {table_name}({', '.join(str(cs) for cs in colspecs)})")
         elif drop:
             # truncate table
             con.execute(f"truncate table {table_name}")
