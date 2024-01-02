@@ -130,3 +130,35 @@ def test_export(odoo_cli):
     print(data.schema)
     assert len(data) > 0, "No data"
     assert data.schema[0]['type'] == "char", "Invalid login type"
+    assert data.column_names == ['login']
+    assert data.get_sql_columns() == [('login', 'varchar')]
+
+
+def test_batches():
+    b = list(odoo_data.make_batches([1, 2, 3]))
+    assert b == [[1, 2, 3]], "simple batch"
+    b = list(odoo_data.make_batches([1, 2, 3], batch_size=2))
+    assert b == [[1, 2], [3]], "small batches"
+    source = [*[{'a': 'ok', 'v': i} for i in range(5)], {'a': 'z', 'v': 0}]
+    b = list(odoo_data.make_batches(source, batch_size=2, group_by="a"))
+    assert b == [source[0:5], source[5:]], "group by"
+    source = [{'a': 'x'}, {'a': 'b'}]
+    b = list(odoo_data.make_batches(source, group_by="a"))
+    assert b == [sorted(source, key=lambda i: i['a'])], "group by should sort"
+
+
+def test_batches_no_key():
+    with pytest.raises(KeyError):
+        list(odoo_data.make_batches([{}], batch_size=2, group_by="a"))
+
+
+def test_load(odoo_cli, odoo_json_rpc_handler):
+    model = odoo_cli['res.users']
+    handler = odoo_json_rpc_handler
+
+    @handler.patch_execute_kw(model.model, 'load')
+    def load_model(fields, data):
+        return "loaded"
+
+    r = odoo_data.load_data(model, [{'login': 'x'}], fields=["login"])
+    assert r == "loaded"

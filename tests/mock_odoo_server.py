@@ -136,7 +136,7 @@ def default_rpc_handler():
         }
 
     @h.patch_execute_kw('res.users', 'search_read')
-    def read_search_partner(domain, fields=[], load=None):
+    def read_search_user(domain, fields=[], load=None):
         print(domain)
         data = [{'id': 1, 'name': 'test', 'login': 'admin', 'partner_id': 1}]
         if not fields:
