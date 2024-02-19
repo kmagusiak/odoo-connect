@@ -335,7 +335,7 @@ class OdooModel:
         """Return the fields of the model"""
         if not self._field_info or (extended and not self._field_info['id'].get('name')):
             attributes = (
-                [] if extended else ['string', 'type', 'readonly', 'required', 'store', 'relation']
+                None if extended else ['string', 'type', 'readonly', 'required', 'store', 'relation']
             )
             self._field_info = self.execute(
                 'fields_get',
