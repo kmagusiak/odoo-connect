@@ -12,11 +12,11 @@ dynamic = ["version"]
 description = "Simple RPC client for Odoo"
 readme = "README.md"
 keywords = ["odoo", "rpc"]
-license = {text = "GNU Lesser General Public License v3 (LGPLv3)"}
-requires-python = ">=3.7"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
 classifiers = [
     # https://pypi.org/pypi?%3Aaction=list_classifiers
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
     "Programming Language :: Python :: 3",
     "Framework :: Odoo",

@@ -1,7 +1,7 @@
 import logging
 import random
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import requests
 
@@ -54,13 +54,13 @@ class OdooClient:
     """Odoo server connection"""
 
     url: str
-    _models: Dict[str, "OdooModel"]
-    _version: Dict[str, Any]
+    _models: dict[str, "OdooModel"]
+    _version: dict[str, Any]
     _database: str
     _username: str
     _password: str
     _uid: Optional[int]
-    context: Dict
+    context: dict
 
     def __init__(
         self,
@@ -194,18 +194,18 @@ class OdooClient:
                 raise OdooServerError('Model %s not found' % model)
         return model
 
-    def list_databases(self) -> List[str]:
+    def list_databases(self) -> list[str]:
         """Get the list of databases (may be disabled on the server and fail)"""
         return self._call("db", "list")
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         """Get the list of known model names."""
         models = self.get_model('ir.model').search_read([], ['model'])
         return [m['model'] for m in models]
 
     def ref(
-        self, xml_id: str, fields: List[str] = [], raise_if_not_found: bool = True
-    ) -> Optional[Dict]:
+        self, xml_id: str, fields: list[str] = [], raise_if_not_found: bool = True
+    ) -> Optional[dict]:
         """Read the record corresponding to the given `xml_id`."""
         if '.' not in xml_id:
             raise ValueError('xml_id not valid')
@@ -331,11 +331,13 @@ class OdooModel:
     def __repr__(self) -> str:
         return repr(self.odoo) + "/" + self.model
 
-    def fields(self, extended=False) -> Dict[str, dict]:
+    def fields(self, extended=False) -> dict[str, dict]:
         """Return the fields of the model"""
         if not self._field_info or (extended and not self._field_info['id'].get('name')):
             attributes = (
-                None if extended else ['string', 'type', 'readonly', 'required', 'store', 'relation']
+                None
+                if extended
+                else ['string', 'type', 'readonly', 'required', 'store', 'relation']
             )
             self._field_info = self.execute(
                 'fields_get',
@@ -344,10 +346,10 @@ class OdooModel:
             )
         return self._field_info  # type: ignore
 
-    def __prepare_dict_fields(self, fields: Union[List[str], Dict[str, Dict]]) -> Dict[str, Dict]:
+    def __prepare_dict_fields(self, fields: Union[list[str], dict[str, dict]]) -> dict[str, dict]:
         """Make sure fields is a dict representing the data to get"""
         if isinstance(fields, list):
-            new_fields: Dict[str, Dict] = {}
+            new_fields: dict[str, dict] = {}
             for field in fields:
                 level = new_fields
                 for f in field.split('.'):
@@ -484,11 +486,11 @@ class OdooModel:
 
         return data
 
-    def _read(self, ids: List[int], fields: List[str], **kwargs):
+    def _read(self, ids: list[int], fields: list[str], **kwargs):
         """Raw read() function"""
         return self.read(ids, fields, load='raw', **kwargs)
 
-    def _search_read(self, domain: List, fields: List[str], **kwargs):
+    def _search_read(self, domain: list, fields: list[str], **kwargs):
         """Raw search_read() function"""
         if self.odoo.major_version >= 15:
             return self.search_read(domain, fields, load='raw', **kwargs)
@@ -507,8 +509,8 @@ class OdooModel:
 
     def read_dict(
         self,
-        ids: Union[List[int], int],
-        fields: Union[List[str], Dict[str, Dict]],
+        ids: Union[list[int], int],
+        fields: Union[list[str], dict[str, dict]],
     ):
         """Read with a dictionnary output and hierarchy view
 
@@ -529,7 +531,7 @@ class OdooModel:
         result = self.__read_dict_recursive(data, fields)
         return result[0] if single else result
 
-    def search_read_dict(self, domain: List, fields: Union[List[str], Dict[str, Dict]], **kwargs):
+    def search_read_dict(self, domain: list, fields: Union[list[str], dict[str, dict]], **kwargs):
         """Search read with a dictionnary output and hierarchy view
 
         Similar to `read_dict`.
@@ -545,7 +547,7 @@ class OdooModel:
         return self.__read_dict_recursive(data, fields)
 
     def read_group_dict(
-        self, domain: List, aggregates: Optional[List], groupby: List[str], **kwargs
+        self, domain: list, aggregates: Optional[list], groupby: list[str], **kwargs
     ):
         """Search read groupped data
 
