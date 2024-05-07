@@ -1,7 +1,8 @@
 import json
 import logging
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, cast
+from typing import Any, Optional, cast
 
 from .format import Formatter
 from .odoo_rpc import OdooModel, urljoin
@@ -16,8 +17,8 @@ then call create or write methods.
 
 
 def make_batches(
-    data: Iterable[Dict], *, batch_size: int = 1000, group_by: str = ''
-) -> Iterable[List[Dict]]:
+    data: Iterable[dict], *, batch_size: int = 1000, group_by: str = ''
+) -> Iterable[list[dict]]:
     """Split an interable to a batched iterable
 
     :param data: The iterable
@@ -25,7 +26,7 @@ def make_batches(
     :param group_by: field to group by (the value is kept in a single batch, can be empty)
     :return: An iterable of batches
     """
-    batch: List[Dict] = []
+    batch: list[dict] = []
     if group_by:
         data = sorted(data, key=lambda d: d[group_by])
         group_value = None
@@ -53,7 +54,7 @@ def load_data(
     *,
     method: str = "load",
     method_row_type=None,
-    fields: Optional[List[str]] = None,
+    fields: Optional[list[str]] = None,
     formatter: Optional[Formatter] = None,
 ):
     """Load the data into the model.
@@ -100,7 +101,7 @@ def load_data(
 
     log.info("Load data using %s.%s(), %d records", model.model, method, len(data))
     if method == 'load':
-        fields = [f.replace('.', '/') for f in cast(List[str], fields)]
+        fields = [f.replace('.', '/') for f in cast(list[str], fields)]
         return model.execute(method, fields=fields, data=data)
     if method == 'write':
         return __load_data_write(model, data)
@@ -110,8 +111,8 @@ def load_data(
 
 
 def __convert_to_type_list(
-    data: Iterable, fields: Optional[List[str]]
-) -> Tuple[Iterable[List], List[str]]:
+    data: Iterable, fields: Optional[list[str]]
+) -> tuple[Iterable[list], list[str]]:
     idata = iter(data)
     first_row = next(idata, None)
     if first_row is None:
@@ -129,7 +130,7 @@ def __convert_to_type_list(
     return data, fields
 
 
-def __convert_to_type_dict(data: Iterable, fields: Optional[List[str]]) -> Iterable[Dict]:
+def __convert_to_type_dict(data: Iterable, fields: Optional[list[str]]) -> Iterable[dict]:
     idata = iter(data)
     first_row = next(idata, None)
     if first_row is None:
@@ -148,7 +149,7 @@ def __convert_to_type_dict(data: Iterable, fields: Optional[List[str]]) -> Itera
     return data
 
 
-def __load_data_write(model: OdooModel, data: List[Dict]) -> Dict:
+def __load_data_write(model: OdooModel, data: list[dict]) -> dict:
     """Use multiple write() and create() calls to update data
 
     :return: {'write_count': x, 'create_count': x, 'ids': [list of ids]}
@@ -192,19 +193,19 @@ class ColumnSpec:
 class ExportData:
     """Exported data from Odoo"""
 
-    schema: List[Dict]
-    data: List[List]
+    schema: list[dict]
+    data: list[list]
 
     @property
     def column_names(self):
         return [h['name'] for h in self.schema]
 
-    def to_dicts(self) -> Iterable[Dict]:
+    def to_dicts(self) -> Iterable[dict]:
         """Return the data as dicts"""
         fields = self.column_names
         return (dict(zip(fields, d)) for d in self.data)
 
-    def to_csv(self, with_header=True) -> Iterable[List[str]]:
+    def to_csv(self, with_header=True) -> Iterable[list[str]]:
         """Return the data for writing a csv file"""
         if with_header:
             yield self.column_names
@@ -244,7 +245,7 @@ class ExportData:
             self.data,
         )
 
-    def get_sql_columns(self) -> List[ColumnSpec]:
+    def get_sql_columns(self) -> list[ColumnSpec]:
         """Get the list of tuples (normalized_column_name, column_type) to write into a table"""
         type_to_sql = {
             'binary': 'binary',
@@ -275,7 +276,7 @@ class ExportData:
         return f"ExportData{self.column_names}({len(self.data)} rows)"
 
 
-def fields_from_export(model: OdooModel, export_name: str) -> List[str]:
+def fields_from_export(model: OdooModel, export_name: str) -> list[str]:
     """Return the list of fields in ir.exports"""
     fields = model.odoo['ir.exports.line'].search_read(
         [
@@ -290,7 +291,7 @@ def fields_from_export(model: OdooModel, export_name: str) -> List[str]:
     return fields
 
 
-def domain_from_filter(model: OdooModel, filter_name: str) -> Dict:
+def domain_from_filter(model: OdooModel, filter_name: str) -> dict:
     """Return a tuple (domain, kwargs for search) from a filter name"""
     filter_data = model.odoo['ir.filters'].search_read_dict(
         [
@@ -311,8 +312,8 @@ def domain_from_filter(model: OdooModel, filter_name: str) -> Dict:
 
 def export_data(
     model: OdooModel,
-    domain: List,
-    fields: List[str],
+    domain: list,
+    fields: list[str],
     *,
     formatter: Optional[Formatter] = None,
     expand_many: bool = False,
@@ -357,7 +358,7 @@ def export_data(
 
 
 def add_fields(
-    model: OdooModel, data: List[Dict], by_field: str, fields: List[str] = ['id'], domain: List = []
+    model: OdooModel, data: list[dict], by_field: str, fields: list[str] = ['id'], domain: list = []
 ):
     """Add fields by querying the model
 
@@ -368,12 +369,12 @@ def add_fields(
     :param domain: Additional domain to use
     :raises Exception: When multiple results have the same by_field key
     """
-    domain_by_field: List[Any] = [(by_field, 'in', [d[by_field] for d in data])]
+    domain_by_field: list[Any] = [(by_field, 'in', [d[by_field] for d in data])]
     domain = ['&'] + domain_by_field + (domain if domain else domain_by_field)
     fetched_data = model.search_read_dict(domain, fields + [by_field])
     index = {d.pop(by_field): d for d in fetched_data}
     if len(index) != len(fetched_data):
-        raise Exception('%s is not unique in %s when adding fields' % (by_field, model.model))
+        raise Exception(f'{by_field} is not unique in {model.model} when adding fields')
     for d in data:
         updates = index.get(d[by_field])
         if updates:
@@ -382,7 +383,7 @@ def add_fields(
             d.update({f: None for f in fields})
 
 
-def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_id'):
+def add_xml_id(model: OdooModel, data: list, *, id_name='id', xml_id_field='xml_id'):
     """Add a field containg the xml_id
 
     :param model: The model
@@ -427,7 +428,7 @@ def add_xml_id(model: OdooModel, data: List, *, id_name='id', xml_id_field='xml_
 
 def add_url(
     model: OdooModel,
-    data: List,
+    data: list,
     *,
     url_field='url',
     model_id_func=None,
@@ -463,7 +464,7 @@ def add_url(
             raise TypeError('Cannot append the url to %s' % type(row))
 
 
-def _flatten(value, access: List[str]) -> Any:
+def _flatten(value, access: list[str]) -> Any:
     if not access:
         return value
     if isinstance(value, dict):
@@ -473,7 +474,7 @@ def _flatten(value, access: List[str]) -> Any:
     return False  # default
 
 
-def _expand_many(data: Iterable[Dict]) -> Iterator[Dict]:
+def _expand_many(data: Iterable[dict]) -> Iterator[dict]:
     for d in data:
         should_yield = True
         for k, v in d.items():
@@ -491,12 +492,12 @@ def _expand_many(data: Iterable[Dict]) -> Iterator[Dict]:
 
 
 def flatten(
-    data: Iterable[Dict],
-    fields: List[str],
+    data: Iterable[dict],
+    fields: list[str],
     *,
     formatter: Optional[Formatter] = None,
     expand_many: bool = False,
-) -> Iterator[List]:
+) -> Iterator[list]:
     """Flatten each dict with values into a single row"""
     if expand_many:
         data = _expand_many(data)

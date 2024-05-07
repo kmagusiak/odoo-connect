@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, overload
+from typing import Optional, overload
 
 from .format import decode_binary
 from .odoo_rpc import OdooClient, OdooModel, urljoin
@@ -47,7 +47,7 @@ def get_attachment(
     if field_info.get("relation") == "ir.attachment":
         if field_info.get("type") != "many2one":
             raise RuntimeError(
-                "Field %s is not a many2one, here are the values: %s" % (field_name, value)
+                f"Field {field_name} is not a many2one, here are the values: {value}"
             )
         if not value:
             return b''
@@ -59,7 +59,7 @@ def get_attachment(
     return decode_binary(value)
 
 
-def get_attachments(odoo: OdooClient, ids: List[int]) -> Dict[int, bytes]:
+def get_attachments(odoo: OdooClient, ids: list[int]) -> dict[int, bytes]:
     """Get a list of tuples (name, raw_bytes) from ir.attachment by ids
 
     :param odoo: Odoo client
@@ -71,8 +71,8 @@ def get_attachments(odoo: OdooClient, ids: List[int]) -> Dict[int, bytes]:
 
 
 def list_attachments(
-    model: OdooModel, ids: List[int], *, domain=[], fields=[], generate_access_token=False
-) -> List[Dict]:
+    model: OdooModel, ids: list[int], *, domain=[], fields=[], generate_access_token=False
+) -> list[dict]:
     """List attachments
 
     We search all attachments linked to the model and ids.
@@ -140,7 +140,7 @@ def list_attachments(
 
 
 def _download_content(
-    odoo: OdooClient, url: str, *, params: Dict = {}, access_token: Optional[str] = None
+    odoo: OdooClient, url: str, *, params: dict = {}, access_token: Optional[str] = None
 ) -> bytes:
     """Download contents from a URL"""
     log = logging.getLogger(__name__)
@@ -198,7 +198,7 @@ def download_image(
 # REPORTS
 
 
-def list_reports(model: OdooModel) -> List[Dict]:
+def list_reports(model: OdooModel) -> list[dict]:
     """List of reports from a model"""
     return model.odoo['ir.actions.report'].search_read(
         [('model', '=', model.model)], ['name', 'report_type', 'report_name']

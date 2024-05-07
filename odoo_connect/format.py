@@ -2,7 +2,7 @@ import base64
 from collections import defaultdict
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, Optional, Tuple, Union, cast
+from typing import Any, Callable, Optional, Union, cast
 
 from .odoo_rpc import OdooModel
 
@@ -24,7 +24,7 @@ NOT_FORMATTED_FIELDS = {
 }
 
 """Default formatters for models"""
-DEFAULT_FORMATTERS: ContextVar[Dict[OdooModel, "Formatter"]] = ContextVar(
+DEFAULT_FORMATTERS: ContextVar[dict[OdooModel, "Formatter"]] = ContextVar(
     'OdooDefaultFormatters', default={}
 )
 
@@ -124,7 +124,7 @@ def format_binary(v: Union[bytes, str]) -> str:
 
 
 """Transform type to tuple(formatter, decoder)"""
-_FORMAT_FUNCTIONS: Dict[str, Tuple[Callable, Callable]] = {
+_FORMAT_FUNCTIONS: dict[str, tuple[Callable, Callable]] = {
     'datetime': (format_datetime, decode_datetime),
     'date': (format_date, decode_date),
     'binary': (format_binary, decode_binary),
@@ -142,10 +142,10 @@ class Formatter:
     """Transformations to apply to source fields.
     Use an empty string to mask some of them."""
     model: Optional[OdooModel] = None
-    field_map: Dict[str, str]
-    field_info: Dict[str, Dict]
-    format_function: Dict[str, Callable[[Any], Any]]
-    decode_function: Dict[str, Callable[[Any], Any]]
+    field_map: dict[str, str]
+    field_info: dict[str, dict]
+    format_function: dict[str, Callable[[Any], Any]]
+    decode_function: dict[str, Callable[[Any], Any]]
     lower_case_fields: bool = False
 
     def __init__(
@@ -200,12 +200,12 @@ class Formatter:
             name = name.lower()
         return name
 
-    def format_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
+    def format_dict(self, d: dict[str, Any]) -> dict[str, Any]:
         """Apply formatting to each field (python object to Odoo data)"""
         d_renamed = [(self.map_field_name(f), v) for f, v in d.items()]
         return {f: self.format_function[f](v) for f, v in d_renamed if f}
 
-    def decode_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
+    def decode_dict(self, d: dict[str, Any]) -> dict[str, Any]:
         """Apply decoding to each field (Odoo data to python object)"""
         return {f: self.decode_function[f](v) for f, v in d.items()}
 

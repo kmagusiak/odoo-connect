@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from contextvars import ContextVar
-from typing import Any, Callable, Dict, Iterable, List, Union
+from typing import Any, Callable, Union
 
 import odoo_connect.format
 
@@ -9,7 +10,7 @@ __doc__ = """Interact more easily with Odoo records."""
 
 
 """Cache of read values"""
-GLOBAL_CACHE: ContextVar[Dict[odoo_rpc.OdooModel, Dict[int, Dict[str, Any]]]] = ContextVar(
+GLOBAL_CACHE: ContextVar[dict[odoo_rpc.OdooModel, dict[int, dict[str, Any]]]] = ContextVar(
     "OdooExploreCache", default={}
 )
 
@@ -18,9 +19,9 @@ class Instance:
     """A proxy for an instance set"""
 
     __model: odoo_rpc.OdooModel
-    __ids: List[int]
+    __ids: list[int]
 
-    def __init__(self, model: odoo_rpc.OdooModel, ids: List[int]) -> None:
+    def __init__(self, model: odoo_rpc.OdooModel, ids: list[int]) -> None:
         self.__model = model
         self.__ids = ids
 
@@ -60,7 +61,7 @@ class Instance:
         return Instance(self.__model, ids)
 
     @property
-    def ids(self) -> List[int]:
+    def ids(self) -> list[int]:
         return self.__ids
 
     @property
@@ -119,7 +120,7 @@ class Instance:
             return value.mapped(paths[1])
         return self._mapped(path)
 
-    def _mapped(self, field_name: str) -> Union["Instance", List[Any]]:
+    def _mapped(self, field_name: str) -> Union["Instance", list[Any]]:
         """Map/read a field"""
         prop = self.__model.fields().get(field_name)
         if not prop:
@@ -130,17 +131,17 @@ class Instance:
             model = self.__model.odoo.get_model(relation)
             # value is either list[int] (many) or int|False (one)
             lists = (v if isinstance(v, list) else [v] for v in values if v)
-            ids = set(i for ls in lists for i in ls)
+            ids = {i for ls in lists for i in ls}
             return Instance(model, list(ids))
         return values
 
-    def cache(self, fields: List[str] = [], computed=False, exists=False) -> "Instance":
+    def cache(self, fields: list[str] = [], computed=False, exists=False) -> "Instance":
         """Cache the record fields and return self"""
         fieldset = set(self._default_fields(computed=computed) + fields)
         model_cache = self.__cache()
         # find missing ids, when missing in cache or field missing in cache
         # read all at once to have more consistency and avoid roundtrips
-        missing_ids = set(i for i in self.__ids if fieldset - model_cache.get(i, {}).keys())
+        missing_ids = {i for i in self.__ids if fieldset - model_cache.get(i, {}).keys()}
         # an exists() check is not needed because read() will return only existing rows
         if not missing_ids:
             return self
@@ -152,7 +153,7 @@ class Instance:
                 model_cache[id] = d
         return self
 
-    def read(self, *, check_fields: List[str] = []) -> List[Dict[str, Any]]:
+    def read(self, *, check_fields: list[str] = []) -> list[dict[str, Any]]:
         """Read the data"""
         self.cache(fields=check_fields)
         model_cache = self.__cache()
@@ -161,7 +162,7 @@ class Instance:
         except KeyError as e:
             raise odoo_rpc.OdooServerError(f"Cannot read {self.__model.model}: {e}")
 
-    def _default_fields(self, *, computed=False) -> List[str]:
+    def _default_fields(self, *, computed=False) -> list[str]:
         """List of fields to read by default"""
         data = self.__model.fields()
         return [
@@ -172,7 +173,7 @@ class Instance:
             and (computed or f in ('id', 'display_name') or prop.get('store'))
         ]
 
-    def fields_get(self, field_names=[]) -> Dict[str, Dict]:
+    def fields_get(self, field_names=[]) -> dict[str, dict]:
         """Get the field information"""
         data = self.__model.fields()
         if field_names:
@@ -192,7 +193,7 @@ class Instance:
         ids = set(self.__ids) & model_cache.keys()
         return self.browse(*ids) if len(ids) < len(self.__ids) else self
 
-    def search(self, domain: List, **kw) -> "Instance":
+    def search(self, domain: list, **kw) -> "Instance":
         """Search for an instance"""
         fields = self._default_fields()
         data = self.__model._search_read(domain, fields, **kw)
@@ -207,7 +208,7 @@ class Instance:
         data = self.__model.name_search(name, **kw)
         return Instance(self.__model, [d[0] for d in data])
 
-    def create(self, *values: Dict[str, Any], format: bool = False) -> "Instance":
+    def create(self, *values: dict[str, Any], format: bool = False) -> "Instance":
         """Create multiple instances"""
         if not values:
             return self.browse()
@@ -219,7 +220,7 @@ class Instance:
         ids = self.__model.create(value_list)
         return self.browse(*ids)
 
-    def write(self, values: Dict[str, Any], *, format: bool = False):
+    def write(self, values: dict[str, Any], *, format: bool = False):
         """Update the values of the current instance"""
         if not values:
             return
@@ -238,7 +239,7 @@ class Instance:
         ids = self.__model.copy(self.__ids)
         return self.browse(*ids)
 
-    def __cache(self) -> Dict[int, Dict[str, Any]]:
+    def __cache(self) -> dict[int, dict[str, Any]]:
         cache = GLOBAL_CACHE.get()
         model_cache = cache.get(self.__model)
         if not model_cache:

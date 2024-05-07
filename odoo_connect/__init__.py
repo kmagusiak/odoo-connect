@@ -1,6 +1,6 @@
 import logging
 import urllib.parse
-from typing import Dict, Optional
+from typing import Optional
 
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError  # noqa
 
@@ -20,7 +20,7 @@ def connect(
     password: Optional[str] = None,
     infer_parameters: bool = True,
     check_connection: bool = True,
-    context: Optional[Dict] = None,
+    context: Optional[dict] = None,
     monodb: bool = False,
     **kw,
 ) -> OdooClient:
@@ -105,7 +105,7 @@ def connect(
         return client
     except (NotImplementedError, OdooConnectionError):
         raise
-    except (ConnectionError, IOError, OdooServerError) as e:
+    except (ConnectionError, OSError, OdooServerError) as e:
         raise OdooConnectionError(e)
 
 

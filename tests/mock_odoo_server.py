@@ -27,7 +27,7 @@ class OdooRPCHandler:
             r = f(model, function, a, kw)
             if r is not None:
                 return r
-        pytest.fail('execute_kw not implemented for %s.%s' % (model, function))
+        pytest.fail(f'execute_kw not implemented for {model}.{function}')
 
     def generic(self, service: str, method: str, args: list):
         """Implement the call method from odoo"""
@@ -37,7 +37,7 @@ class OdooRPCHandler:
             r = f(service, method, args)
             if r is not None:
                 return r
-        pytest.fail('%s.%s not implemented' % (service, method))
+        pytest.fail(f'{service}.{method} not implemented')
 
     def patch_generic(self, f):
         """Append a method to `generic` call.
@@ -116,7 +116,7 @@ def default_rpc_handler():
                 return 1
             if username and username == password:
                 return 2
-            raise OdooMockedError('Cannot authenticate on %s with %s' % (database, username))
+            raise OdooMockedError(f'Cannot authenticate on {database} with {username}')
 
     @h.patch_execute_kw('res.users', 'fields_get')
     def field_get_user(allfields=[], attributes=[]):
