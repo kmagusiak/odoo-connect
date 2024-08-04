@@ -63,6 +63,7 @@ class OdooRPCHandler:
             def checked_f(model_, function_, a, kw):
                 if model == model_ and function == function_:
                     return f(*a, **kw)
+                return None
 
             self.call_execute_kw.append(checked_f)
             return checked_f
@@ -104,11 +105,12 @@ def default_rpc_handler():
                 "server_serie": "16.0",
                 "protocol_version": "1",
             }
+        return None
 
     @h.patch_generic
     def authenticate(service, method, args):
         if method == 'login':
-            args = args + [{}]
+            args = [*args, {}]
             method = 'authenticate'
         if service == 'common' and method == 'authenticate':
             database, username, password, env = args
@@ -117,6 +119,7 @@ def default_rpc_handler():
             if username and username == password:
                 return 2
             raise OdooMockedError(f'Cannot authenticate on {database} with {username}')
+        return None
 
     @h.patch_execute_kw('res.users', 'fields_get')
     def field_get_user(allfields=[], attributes=[]):
@@ -156,7 +159,7 @@ def default_rpc_handler():
             'parnter_id': [id, 'Contact'],
         }
         if fields:
-            fields = ['id'] + fields
+            fields = ["id", *fields]
             result = {k: v for k, v in result.items() if k in fields}
         return [result]
 

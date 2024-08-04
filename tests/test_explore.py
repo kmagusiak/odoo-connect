@@ -14,7 +14,7 @@ def odoo_cli_partner(odoo_cli, odoo_json_rpc_handler) -> Instance:
         if not fields:
             fields = data[0].keys()
         elif 'id' not in fields:
-            fields = ['id'] + fields
+            fields = ['id', *fields]
         return [{k: v for k, v in d.items() if k in fields} for d in data if d['id'] in ids]
 
     handler.patch_execute_kw('res.partner', 'read')(read_partner)

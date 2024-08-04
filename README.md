@@ -108,7 +108,7 @@ Alternatively, clone and setup the repository manually.
 git clone $url
 cd odoo-connect
 # Install dev libraries
-pip install -r requirements.txt
+pip install -e .[pinned,dev,test]
 ./pre-commit install
 # Run some tests
 pytest

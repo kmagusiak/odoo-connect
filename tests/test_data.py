@@ -22,7 +22,7 @@ def test_add_field(odoo_cli, odoo_json_rpc_handler):
 
     @handler.patch_execute_kw('res.partner', 'fields_get')
     def read_fields_partner(allfields=[], attributes=[]):
-        attr = {a: True if a == 'store' else False for a in attributes}
+        attr = {a: a == 'store' for a in attributes}
         return {
             'id': {**attr, 'type': 'int', 'string': 'ID'},
             'name': {**attr, 'type': 'char', 'string': 'Name'},
@@ -87,7 +87,7 @@ def test_add_xml_id(odoo_cli, odoo_json_rpc_handler):
 )
 def test_flatten(dict, fields, expected):
     result = odoo_data.flatten([dict], fields)
-    output = list(result)[0]
+    output = next(iter(result))
     assert expected == output
 
 

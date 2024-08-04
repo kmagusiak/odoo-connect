@@ -1,10 +1,16 @@
 [build-system]
 requires = [
-    "setuptools>=61",
-    "setuptools-scm>=6",
+    "setuptools>=70",
+    "setuptools-scm>=8",
     "wheel",
 ]
 build-backend = "setuptools.build_meta"
+
+[tools.setuptools]
+packages = ["odoo_connect"]
+
+[tool.setuptools_scm]
+local_scheme = "no-local-version"
 
 [project]
 name = "odoo-connect"
@@ -25,6 +31,23 @@ dependencies = [
     "requests",
 ]
 
+[project.optional-dependencies]
+pinned = [
+    "requests==2.32.3",
+    "charset-normalizer==3.3.2",
+    "idna==3.7",
+]
+dev = [
+    "mypy~=1.11",
+    "ruff==0.5.6",
+    "types-requests~=2.31.0",
+    "ipython>=8",
+]
+test = [
+    "pytest==8.3.2",
+    "pytest-httpserver==1.0.12",
+]
+
 [project.urls]
 Homepage = "https://github.com/kmagusiak/odoo-connect"
 
@@ -36,15 +59,56 @@ email = "chrmag@poczta.onet.pl"
 line-length = 100
 skip-string-normalization = 1
 
-[tool.mypy]
-ignore_missing_imports = true
-
 [tool.isort]
 profile = "black"
 line_length = 100
 
-[tools.setuptools]
-packages = ["odoo_connect"]
+[tool.mypy]
+ignore_missing_imports = true
 
-[tool.setuptools_scm]
-local_scheme = "no-local-version"
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.format]
+quote-style="preserve"
+
+[tool.ruff.lint]
+# https://beta.ruff.rs/docs/rules/
+select = [
+    "C4",   # flake8 comprehensions
+    #"C9",  # mccabe
+    "COM",  # flake8 commas
+    #"D",   # pydocstyle, pydoclint
+    "E",    # pycodestyle
+    "EXE",  # flake8-executable
+    "F",    # pyflakes
+    "I",    # isort
+    "LOG",  # flake8 logging
+    "N",    # naming
+    "PLE",  # pylint errors
+    "RET",  # flake8 return
+    "RUF",  # ruff specific
+    "SIM",  # flake8 simplify
+    "TID",  # flake8 tidy imports
+    "UP",   # pyupdate
+    "W",    # pycodestyle
+    # specific rules
+    "FIX003" # comments with XXX should become TODO or FIXME
+]
+ignore = [
+    "COM812", # trailing commas (because we use the ruff formatter)
+    "D102",  # mission doc in public method, function
+    "D205",  # blank line required between summary and description
+    "D400",  # first line should end with a period
+    "E731",  # don't assign lambda
+    "SIM108",  # simplify ITE by operator
+    "SIM300",  # yoda condition
+    "UP038", # isinstance must use union operator on types
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

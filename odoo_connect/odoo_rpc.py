@@ -110,7 +110,7 @@ class OdooClient:
         # Fail or default
         if self.database:
             return self.database
-        raise OdooServerError('Cannot determine the database for [%s]' % self.url)
+        raise OdooServerError(f'Cannot determine the database for [{self.url}]')
 
     def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
@@ -121,7 +121,7 @@ class OdooClient:
         self._password = password
         if not username:
             if old_username:
-                log.info('Logged out [%s]' % self.url)
+                log.info(f'Logged out [{self.url}]')
             return
         if not self._database:
             raise OdooServerError('Missing database to connect')
@@ -135,7 +135,7 @@ class OdooClient:
             user_agent_env,
         )
         if not self._uid:
-            raise OdooServerError('Failed to authenticate user %s' % username)
+            raise OdooServerError(f'Failed to authenticate user {username}')
         log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
 
     def _json_rpc(self, method: str, params: Any):
@@ -191,7 +191,7 @@ class OdooClient:
                 # let's fetch the fields (which we probably will do anyways)
                 model.fields()
             except:  # noqa: E722
-                raise OdooServerError('Model %s not found' % model)
+                raise OdooServerError(f'Model {model} not found')
         return model
 
     def list_databases(self) -> list[str]:
@@ -221,9 +221,7 @@ class OdooClient:
             if to_return:
                 return to_return[0]
         if raise_if_not_found:
-            raise ValueError(
-                'No record found for unique ID %s. It may have been deleted.' % (xml_id)
-            )
+            raise ValueError(f'No record found for unique ID {xml_id}. It may have been deleted.')
         return {}
 
     def version(self) -> dict:
@@ -368,7 +366,7 @@ class OdooModel:
                 new_fields.update({k: v for k, v in fields.items() if k not in new_fields})
                 return new_fields
             return fields
-        raise ValueError('Invalid fields parameter: %s' % fields)
+        raise ValueError(f'Invalid fields parameter: {fields}')
 
     def __read_dict_date(self, data, fields):
         """Transform dates into ISO-like format"""

@@ -29,6 +29,7 @@ def test_list_databases(odoo_cli, odoo_json_rpc_handler):
     def list_db(service, method, args):
         if service == 'db' and method == 'list':
             return ['odoo']
+        return None
 
     databases = odoo_cli.list_databases()
     assert databases == ['odoo']
