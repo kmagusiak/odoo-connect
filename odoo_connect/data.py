@@ -89,15 +89,15 @@ def load_data(
         formatter = Formatter(model)
 
     log.info("Load: convert and format data")
-    if method_row_type == dict:
+    if method_row_type is dict:
         data = __convert_to_type_dict(data, fields)
         data = [formatter.format_dict(d) for d in data]
-    elif method_row_type == list:
+    elif method_row_type is list:
         data, fields = __convert_to_type_list(data, fields)
         formatter_functions = [formatter.format_function[f] for f in fields]
         data = [[ff(v) for ff, v in zip(formatter_functions, d)] for d in data]
     else:
-        raise Exception('Unsupported method row type: %s' % method_row_type)
+        raise Exception(f'Unsupported method row type: {method_row_type}')
 
     log.info("Load data using %s.%s(), %d records", model.model, method, len(data))
     if method == 'load':
@@ -126,7 +126,7 @@ def __convert_to_type_list(
         fields = first_row
         data = idata
     elif not isinstance(data, list):
-        data = [first_row] + list(data)
+        data = [first_row, *list(data)]
     return data, fields
 
 
@@ -141,11 +141,11 @@ def __convert_to_type_dict(data: Iterable, fields: Optional[list[str]]) -> Itera
             data = (dict(zip(fields, d)) for d in idata)
         else:
             if not isinstance(data, list):
-                data = [first_row] + list(idata)
+                data = [first_row, *list(idata)]
             if fields:
                 data = ({f: d[i] for i, f in enumerate(fields)} for d in data)
     elif not isinstance(data, list):
-        data = [first_row] + list(idata)
+        data = [first_row, *list(idata)]
     return data
 
 
@@ -371,7 +371,7 @@ def add_fields(
     """
     domain_by_field: list[Any] = [(by_field, 'in', [d[by_field] for d in data])]
     domain = ['&'] + domain_by_field + (domain if domain else domain_by_field)
-    fetched_data = model.search_read_dict(domain, fields + [by_field])
+    fetched_data = model.search_read_dict(domain, [*fields, by_field])
     index = {d.pop(by_field): d for d in fetched_data}
     if len(index) != len(fetched_data):
         raise Exception(f'{by_field} is not unique in {model.model} when adding fields')
@@ -405,7 +405,7 @@ def add_xml_id(model: OdooModel, data: list, *, id_name='id', xml_id_field='xml_
             else:
                 ids.add(row[cast(int, id_index)])
         else:
-            raise TypeError('Cannot append the url to %s' % type(row))
+            raise TypeError(f'Cannot append the url to {type(row)}')
     xml_ids = {
         i['res_id']: i['complete_name']
         for i in model.odoo['ir.model.data'].search_read(
@@ -445,9 +445,9 @@ def add_url(
     base_url = model.odoo.url
     if not model_id_func and data:
         if isinstance(data[0], list):
-            model_id_func = lambda r: (model.model, r[0])  # noqa: E731
+            model_id_func = lambda r: (model.model, r[0])
         else:
-            model_id_func = lambda d: (model.model, d['id'])  # noqa: E731
+            model_id_func = lambda d: (model.model, d['id'])
     for row_num, row in enumerate(data):
         model_name, id = model_id_func(row)
         url = build_url(row, model_name, id)
@@ -461,7 +461,7 @@ def add_url(
             else:
                 row.append(url)
         else:
-            raise TypeError('Cannot append the url to %s' % type(row))
+            raise TypeError(f'Cannot append the url to {type(row)}')
 
 
 def _flatten(value, access: list[str]) -> Any:

@@ -26,11 +26,9 @@
 			},
 			"extensions": [
 				"ms-python.python",
-				"ms-python.black-formatter",
-				"ms-python.flake8",
-				"ms-python.isort",
-				"matangover.mypy",
-				"ms-python.vscode-pylance"
+				"ms-python.vscode-pylance",
+				"charliermarsh.ruff",
+				"matangover.mypy"
 			]
 		}
 	},

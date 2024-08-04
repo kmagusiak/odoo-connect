@@ -53,7 +53,7 @@ def get_attachment(
             return b''
         value = value[0]
     elif field_info.get("type") != "binary":
-        raise RuntimeError("%s is neither a binary or an ir.attachment field" % field_name)
+        raise RuntimeError(f"{field_name} is neither a binary or an ir.attachment field")
     if isinstance(value, int):
         return get_attachment(model, value)
     return decode_binary(value)
@@ -96,10 +96,7 @@ def list_attachments(
     if model.model == 'ir.attachment':
         attachments = model
         data = attachments.search_read(
-            [
-                ('id', 'in', ids),
-            ]
-            + domain,
+            [('id', 'in', ids), *domain],
             fields,
         )
     else:
@@ -109,8 +106,8 @@ def list_attachments(
                 ('res_model', '=', model.model),
                 ('res_id', 'in', ids),
                 ('id', '!=', 0),  # to get all res_field
-            ]
-            + domain,
+                *domain,
+            ],
             fields,
         )
     # Get contents

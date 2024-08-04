@@ -2,7 +2,7 @@ import logging
 import urllib.parse
 from typing import Optional
 
-from .odoo_rpc import OdooClient, OdooModel, OdooServerError  # noqa
+from .odoo_rpc import OdooClient, OdooModel, OdooServerError
 
 __doc__ = """Simple Odoo RPC library."""
 

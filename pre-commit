@@ -2,34 +2,46 @@
 set -eu
 # Check directory
 cd "$(dirname "$0")"
-[[ "$0" != *.git/hooks/* ]] || cd ../..
+[ -d .git ] || cd ../..
+[ -d .git ]
 
-pre_commit() {
-	flake8
-	black --check .
-	isort --check-only .
+check() {
+	echo " ruff:"
+	ruff check
+	ruff format --check
 }
 
 lint() {
-	pre_commit
-	mypy --install-types --non-interactive .
+	check
+	echo " mypy:"
+	mypy .
+}
+
+fix() {
+	ruff check --fix-only .
 }
 
 format() {
-	black .
-	isort .
+	ruff format
 }
 
 # Commands
 case "${1:-run}" in
-	run)
-		pre_commit
-		echo "All good to commit"
+	run|check)
+		check
+		echo " all good to commit."
 		;;
 	lint)
-		lint;;
+		lint
+		;;
+	fix)
+		echo "Fix all..."
+		fix
+		format
+		;;
 	format)
-		format;;
+		format
+		;;
 	install)
 		echo "Installing pre-commit"
 		cd .git/hooks
@@ -41,5 +53,5 @@ case "${1:-run}" in
 		;;
 	*)
 		echo "Invalid argument: $*"
-		echo "Supported options: lint, install, uninstall"
+		echo "Supported options: lint, fix, format, install, uninstall"
 esac

@@ -38,7 +38,7 @@ def test_binary_encoding():
 def test_format(type_name, input, expected):
     ff = odoo_format._FORMAT_FUNCTIONS.get(type_name)
     formatter = ff[0] if ff else odoo_format.format_default
-    assert formatter(input) == expected, "Couldn't format %s" % type_name
+    assert formatter(input) == expected, f"Couldn't format {type_name}"
 
 
 @pytest.mark.parametrize(
@@ -58,7 +58,7 @@ def test_format(type_name, input, expected):
 def test_decode(type_name, input, expected):
     ff = odoo_format._FORMAT_FUNCTIONS.get(type_name)
     decoder = ff[1] if ff else odoo_format.decode_default
-    assert decoder(input) == expected, "Couldn't decode %s" % type_name
+    assert decoder(input) == expected, f"Couldn't decode {type_name}"
 
 
 def test_formatter():
