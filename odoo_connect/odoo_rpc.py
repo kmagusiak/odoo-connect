@@ -2,19 +2,11 @@ import logging
 import random
 import re
 from typing import Any, Optional, Union
+from urllib.parse import urljoin
 
 import requests
 
 __doc__ = """RPC class for Odoo"""
-
-
-def urljoin(base: str, *parts) -> str:
-    """Simple URL joining"""
-    if not parts:
-        return base
-    if base.endswith("/"):
-        base = base[:-1]
-    return "/".join([base] + [p.strip("/") for p in parts])
 
 
 def get_month(value: str) -> int:
@@ -267,7 +259,7 @@ class OdooClient:
                 'login_date',
             ],
         )
-        return data[0] if data else None
+        return data[0] if data else {}
 
     @property
     def database(self) -> str:

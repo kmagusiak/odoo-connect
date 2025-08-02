@@ -164,7 +164,7 @@ class Formatter:
         self.format_function = defaultdict(lambda: format_default)
         self.decode_function = defaultdict(lambda: decode_default)
         self.lower_case_fields = lower_case_fields
-        self.field_map = {f: '' for f in NOT_FORMATTED_FIELDS}
+        self.field_map = dict.fromkeys(NOT_FORMATTED_FIELDS, '')
         self.field_info = {}
         if model is not None:
             self.load_from_model(model, decode_relations=decode_relations)

@@ -380,7 +380,7 @@ def add_fields(
         if updates:
             d.update(updates)
         else:
-            d.update({f: None for f in fields})
+            d.update(dict.fromkeys(fields))
 
 
 def add_xml_id(model: OdooModel, data: list, *, id_name='id', xml_id_field='xml_id'):
@@ -511,10 +511,10 @@ def flatten(
 
 __all__ = [
     'Formatter',
-    'make_batches',
-    'load_data',
-    'export_data',
     'add_fields',
     'add_url',
     'add_xml_id',
+    'export_data',
+    'load_data',
+    'make_batches',
 ]
