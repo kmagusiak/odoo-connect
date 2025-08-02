@@ -381,7 +381,7 @@ class OdooModel:
         """
         self.odoo = odoo
         self.model = model
-        self._info: dict | None = None
+        self._info: Optional[dict] = None
 
     def __getattr__(self, name: str):
         """By default, return function bound to execute(name, ...)"""
