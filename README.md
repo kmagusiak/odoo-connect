@@ -13,6 +13,21 @@ so = env['sale.order']
 so.search_read([('create_uid', '=', 1)], [])
 ```
 
+## /json/2/ support
+
+Since the introduction of `/json/2` in Odoo 19, there is no need to use this
+library. You can use any HTTP client and simply send RPC calls.
+You could use this library to explore the data more easily. If this is the
+case, pass a token instead of user/password when connecting.
+
+```python
+import httpx
+API_KEY = ...
+cli = httpx.Client(base_url=..., headers={'Authorization': f'Bearer {API_KEY}'})
+resp = cli.post('/json/2/sale.order/search_read', json={'domain': [], 'limit': 5})
+resp.raise_for_status().json()
+```
+
 ## Rationale
 
 [OdooRPC](https://pypi.org/project/OdooRPC/)
@@ -47,8 +62,6 @@ lines.increment_qty([('product_uom_qty', '>', 1)])
 ## Export and import data
 
 A separate package provides utilities to more easily extract data from Odoo.
-It also contains utility to get binary data (attachments) and reports;
-however this requires administrative permissions.
 
 Since Odoo doesn't accept all kind of values, the `format` package will help
 with converting between python values and values returned by Odoo.
