@@ -267,7 +267,7 @@ class OdooClient:
                 'login_date',
             ],
         )
-        return data[0] if data else None
+        return data[0] if data else {}
 
     @property
     def database(self) -> str:
