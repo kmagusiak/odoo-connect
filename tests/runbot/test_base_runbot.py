@@ -12,7 +12,7 @@ def test_user_with_protocol(connect_params):
 
 
 def test_version(connect_params):
-    env = odoo_connect.connect(connect_params['url'])
+    env = odoo_connect.connect(**connect_params)
     version = env.version()
     print(version)
     assert isinstance(version, dict)
