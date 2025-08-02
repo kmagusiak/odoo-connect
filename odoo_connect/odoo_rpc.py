@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import requests
 
 __doc__ = """RPC class for Odoo"""
+_logger = logging.getLogger('odoo_connect')
 
 
 def get_month(value: str) -> int:
@@ -45,15 +46,6 @@ class OdooServerError(RuntimeError):
 class OdooClient:
     """Odoo server connection"""
 
-    url: str
-    _models: dict[str, "OdooModel"]
-    _version: dict[str, Any]
-    _database: str
-    _username: str
-    _password: str
-    _uid: Optional[int]
-    context: dict
-
     def __init__(
         self,
         url: str,
@@ -61,15 +53,15 @@ class OdooClient:
     ):
         """Create new connection."""
         self.url = url
-        self.context = {}
-        self._database = database or ''
-        self._models = {}
-        self._version = {}
-        self._username = ''
-        self._password = ''
-        self._uid = None
+        self.context: dict = {}
+        self._database: str = database or ''
+        self._models: dict[str, OdooModel] = {}
+        self._version: dict[str, Any] = {}
+        self._username: str = ''
+        self._password: str = ''
+        self._uid: Optional[int] = None
         self._init_session()
-        logging.getLogger(__name__).info(
+        _logger.info(
             "Odoo initialized %s, db: [%s]",
             self.url,
             self.database,
@@ -77,28 +69,27 @@ class OdooClient:
 
     def _init_session(self):
         """Initialize the session"""
-        self.__json_url = urljoin(self.url, "jsonrpc")
+        self.__json_url: str = urljoin(self.url, "jsonrpc")
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': 'odoo-connect (python)'})
 
     def _find_default_database(self, *, monodb=True) -> str:
         """Find the default database from the server or raise an exception"""
-        log = logging.getLogger(__name__)
-        log.debug("Lookup the default database for [%s]", self.url)
+        _logger.debug("Lookup the default database for [%s]", self.url)
         # Get from monodb
         try:
             db = self._call("db", "monodb") if monodb else None
             if isinstance(db, str) and db:
                 return db
         except OdooServerError as e:
-            log.debug('db.monodb call failed: %s', e)
+            _logger.debug('db.monodb call failed: %s', e)
         # Try to list databases
         try:
             dbs = self.list_databases()
             if len(dbs) == 1:
                 return dbs[0]
         except OdooServerError as e:
-            log.debug('db.list call failed: %s', e)
+            _logger.debug('db.list call failed: %s', e)
         # Fail or default
         if self.database:
             return self.database
@@ -106,14 +97,13 @@ class OdooClient:
 
     def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
-        log = logging.getLogger(__name__)
         old_username = self._username
         self._uid = None
         self._username = username
         self._password = password
         if not username:
             if old_username:
-                log.info(f'Logged out [{self.url}]')
+                _logger.info(f'Logged out [{self.url}]')
             return
         if not self._database:
             raise OdooServerError('Missing database to connect')
@@ -128,7 +118,7 @@ class OdooClient:
         )
         if not self._uid:
             raise OdooServerError(f'Failed to authenticate user {username}')
-        log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
+        _logger.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
 
     def _json_rpc(self, method: str, params: Any):
         """Make a jsonrpc call"""
@@ -272,7 +262,7 @@ class OdooClient:
             raise ValueError('Cannot set database: None')
         self.authenticate('', '')  # log out first
         self._database = database
-        logging.getLogger(__name__).info(
+        _logger.info(
             "Odoo %s, db: [%s]",
             self.url,
             self.database,
@@ -283,7 +273,7 @@ class OdooClient:
         return self.get_model(model)
 
     def __repr__(self) -> str:
-        user = str(self._uid or self._username)
+        user = str(self._uid or self.username)
         return f"OdooClient({self.url},{self.protocol},db:{self.database},user:{user})"
 
 
@@ -310,7 +300,7 @@ class OdooModel:
 
     def execute(self, method: str, *args, **kw):
         """Execute an rpc method with arguments"""
-        logging.getLogger(__name__).debug("Execute %s on %s", method, self.model)
+        _logger.debug("Execute %s on %s", method, self.model)
         return self.odoo._execute_kw(
             self.model,
             method,

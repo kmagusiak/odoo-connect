@@ -5,7 +5,7 @@ from typing import Optional
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError
 
 __doc__ = """Simple Odoo RPC library."""
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger('odoo_connect')
 
 
 class OdooConnectionError(OdooServerError):
