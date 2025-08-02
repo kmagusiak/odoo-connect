@@ -102,12 +102,15 @@ def load_data(
     log.info("Load data using %s.%s(), %d records", model.model, method, len(data))
     if method == 'load':
         fields = [f.replace('.', '/') for f in cast(list[str], fields)]
-        return model.execute(method, fields=fields, data=data)
+        return model.execute('load', fields=fields, data=data)
     if method == 'write':
         return __load_data_write(model, data)
+    kw = {}
     if fields:
-        return model.execute(method, data, fields=fields)
-    return model.execute(method, data)
+        kw['fields'] = fields
+    if model.odoo.protocol == 'json/2':
+        return model.execute(method, data=data, **kw)
+    return model.execute(method, data, **kw)
 
 
 def __convert_to_type_list(
@@ -159,13 +162,13 @@ def __load_data_write(model: OdooModel, data: list[dict]) -> dict:
     for d in data:
         id = d.pop('id')
         if id:
-            model.execute('write', id, d)
+            model.write(id, d)
             ids.append(id)
         else:
             create_data.append(d)
             ids.append(0)
     if create_data:
-        created_ids = model.execute('create', create_data)
+        created_ids = model.create(create_data)
         iids = iter(created_ids)
         for i in range(len(ids)):
             if not ids[i]:
@@ -278,7 +281,7 @@ class ExportData:
 
 def fields_from_export(model: OdooModel, export_name: str) -> list[str]:
     """Return the list of fields in ir.exports"""
-    fields = model.odoo['ir.exports.line'].search_read(
+    fields = model.odoo.get_model('ir.exports.line').search_read(
         [
             ('export_id.name', '=', export_name),
             ('export_id.resource', '=', model.model),
