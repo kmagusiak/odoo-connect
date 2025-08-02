@@ -5,6 +5,7 @@ from typing import Optional
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError
 
 __doc__ = """Simple Odoo RPC library."""
+_logger = logging.getLogger(__name__)
 
 
 class OdooConnectionError(OdooServerError):
@@ -49,7 +50,7 @@ def connect(
     :return: Connection object to the Odoo instance
     """
     if kw:
-        logging.warning('Unknown connect() paramters: %s', list(kw.keys()))
+        _logger.warning('Unknown connect() paramters: %s', list(kw.keys()))
     if database == '@monodb':
         monodb = True
         database = None
@@ -110,9 +111,9 @@ def connect(
 
 
 __all__ = [
-    "connect",
-    "OdooConnectionError",
     "OdooClient",
+    "OdooConnectionError",
     "OdooModel",
     "OdooServerError",
+    "connect",
 ]
