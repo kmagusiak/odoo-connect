@@ -34,13 +34,20 @@ class OdooServerError(RuntimeError):
 
     def get_data(self) -> Optional[dict]:
         """Get the data dictionnary for the error"""
-        return next((a for a in self.args if isinstance(a, dict)), None)
+        dat = next((a for a in self.args if isinstance(a, dict)), None)
+        if not dat:
+            return None
+        return dat.get('data') or dat
 
     def get_remote_trace(self) -> Optional[str]:
         """Get the debug trace received from the remote server"""
         data = self.get_data() or {}
-        dat = data.get('data') or {}
-        return dat.get('debug')
+        return data.get('debug')
+
+    def __str__(self):
+        if (data := self.get_data()) and (message := data.get("message")):
+            return message
+        return super().__str__()
 
 
 class OdooClient:
@@ -330,7 +337,7 @@ class OdooClientJson(OdooClient):
             kw['context'] = self.context
         # execute
         resp = self.session.post(urljoin(self.__json_url, f"{model}/{method}"), json=kw)
-        if 500 <= resp.status_code < 600:
+        if 400 <= resp.status_code < 600:
             try:
                 reply = resp.json()
                 raise OdooServerError(reply)
@@ -410,7 +417,7 @@ class OdooModel:
             raise OdooServerError("Can fetch documentation only for json/2")
         if self._info and self._info.get('methods'):
             return self._info
-        resp = self.odoo.session.get(urljoin(self.odoo.url, f'/doc/{self.model}.json'))
+        resp = self.odoo.session.get(urljoin(self.odoo.url, f'/doc-bearer/{self.model}.json'))
         resp.raise_for_status()
         data = resp.json()
         if not isinstance(data, dict):
