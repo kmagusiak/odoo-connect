@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import requests
 
 __doc__ = """RPC class for Odoo"""
+_logger = logging.getLogger('odoo_connect')
 
 
 def get_month(value: str) -> int:
@@ -33,72 +34,66 @@ class OdooServerError(RuntimeError):
 
     def get_data(self) -> Optional[dict]:
         """Get the data dictionnary for the error"""
-        return next((a for a in self.args if isinstance(a, dict)), None)
+        dat = next((a for a in self.args if isinstance(a, dict)), None)
+        if not dat:
+            return None
+        return dat.get('data') or dat
 
     def get_remote_trace(self) -> Optional[str]:
         """Get the debug trace received from the remote server"""
         data = self.get_data() or {}
-        dat = data.get('data') or {}
-        return dat.get('debug')
+        return data.get('debug')
+
+    def __str__(self):
+        if (data := self.get_data()) and (message := data.get("message")):
+            return message
+        return super().__str__()
 
 
 class OdooClient:
     """Odoo server connection"""
 
-    url: str
-    _models: dict[str, "OdooModel"]
-    _version: dict[str, Any]
-    _database: str
-    _username: str
-    _password: str
-    _uid: Optional[int]
-    context: dict
-
     def __init__(
         self,
         url: str,
+        *,
         database: Optional[str] = None,
     ):
         """Create new connection."""
         self.url = url
-        self.context = {}
-        self._database = database or ''
-        self._models = {}
-        self._version = {}
-        self._username = ''
-        self._password = ''
-        self._uid = None
-        self._init_session()
-        logging.getLogger(__name__).info(
+        self.context: dict = {}
+        self._database: str = database or ''
+        self._models: dict[str, OdooModel] = {}
+        self._version: dict[str, Any] = {}
+        self._username: str = ''
+        self._password: str = ''
+        self._uid: Optional[int] = None
+        self.__json_url: str = urljoin(self.url, "jsonrpc")
+        self.session = requests.Session()
+        self.session.headers.update({'User-Agent': 'odoo-connect (python)'})
+        _logger.info(
             "Odoo initialized %s, db: [%s]",
             self.url,
             self.database,
         )
 
-    def _init_session(self):
-        """Initialize the session"""
-        self.__json_url = urljoin(self.url, "jsonrpc")
-        self.session = requests.Session()
-        self.session.headers.update({'User-Agent': 'odoo-connect (python)'})
-
     def _find_default_database(self, *, monodb=True) -> str:
         """Find the default database from the server or raise an exception"""
-        log = logging.getLogger(__name__)
-        log.debug("Lookup the default database for [%s]", self.url)
+        _logger.debug("Lookup the default database for [%s]", self.url)
         # Get from monodb
         try:
             db = self._call("db", "monodb") if monodb else None
             if isinstance(db, str) and db:
                 return db
         except OdooServerError as e:
-            log.debug('db.monodb call failed: %s', e)
+            _logger.debug('db.monodb call failed: %s', e)
         # Try to list databases
         try:
             dbs = self.list_databases()
             if len(dbs) == 1:
                 return dbs[0]
         except OdooServerError as e:
-            log.debug('db.list call failed: %s', e)
+            _logger.debug('db.list call failed: %s', e)
         # Fail or default
         if self.database:
             return self.database
@@ -106,14 +101,13 @@ class OdooClient:
 
     def authenticate(self, username: str, password: str):
         """Authenticate with username and password"""
-        log = logging.getLogger(__name__)
         old_username = self._username
         self._uid = None
         self._username = username
         self._password = password
         if not username:
             if old_username:
-                log.info(f'Logged out [{self.url}]')
+                _logger.info(f'Logged out [{self.url}]')
             return
         if not self._database:
             raise OdooServerError('Missing database to connect')
@@ -128,7 +122,7 @@ class OdooClient:
         )
         if not self._uid:
             raise OdooServerError(f'Failed to authenticate user {username}')
-        log.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
+        _logger.info("Login successful [%s], [%s] uid: %d", self.url, self.username, self._uid)
 
     def _json_rpc(self, method: str, params: Any):
         """Make a jsonrpc call"""
@@ -228,7 +222,9 @@ class OdooClient:
 
     @property
     def major_version(self) -> int:
-        return self.version()['server_version_info'][0]
+        version = self.version()
+        info = version.get('server_version_info') or version.get('version_info')
+        return info[0]  # type: ignore
 
     @property
     def protocol(self) -> str:
@@ -254,7 +250,7 @@ class OdooClient:
             [
                 'login',
                 'name',
-                'groups_id',
+                'groups_id' if self.major_version < 19 else 'group_ids',
                 'partner_id',
                 'login_date',
             ],
@@ -272,7 +268,7 @@ class OdooClient:
             raise ValueError('Cannot set database: None')
         self.authenticate('', '')  # log out first
         self._database = database
-        logging.getLogger(__name__).info(
+        _logger.info(
             "Odoo %s, db: [%s]",
             self.url,
             self.database,
@@ -287,6 +283,100 @@ class OdooClient:
         return f"OdooClient({self.url},{self.protocol},db:{self.database},user:{user})"
 
 
+class OdooClientJson(OdooClient):
+    def __init__(self, url, *, database=None, token: str):
+        super().__init__(url, database=database)
+        self.session.headers['Authorization'] = f"Bearer {token}"
+        if database:
+            self.session.headers['X-Odoo-Database'] = database
+        self.__json_url: str = urljoin(self.url, "json/2/")
+
+    def _find_default_database(self, *, monodb=True):
+        raise OdooServerError(f'Cannot determine the database for [{self.url}]')
+
+    def authenticate(self, username, password):
+        if username:
+            raise NotImplementedError("Cannot authenticate using json/2")
+
+    def _call(self, service, method, *args):
+        raise NotImplementedError
+
+    def _execute_kw(self, model: str, method: str, *args, **kw):
+        """Execute a method on a model"""
+        # check if the first argument is the ids
+        if len(args) == 1 and isinstance(args[0], int):
+            assert 'ids' not in kw, "ids supplied twice"
+            kw['ids'] = [args[0]]
+            args = args[1:]
+        elif (
+            len(args) == 1
+            and isinstance(args[0], (tuple, list))
+            and all(isinstance(id_, int) for id_ in args[0])
+        ):
+            assert 'ids' not in kw, "ids supplied twice"
+            kw['ids'] = args[0]
+            args = args[1:]
+        # check if we have other positional arguments
+        if args:
+            docs = self.get_model(model)._fetch_documentation()
+            method_info = (docs.get('methods') or {}).get(method)
+            if not method_info:
+                raise OdooServerError("Failed to get method information")
+            assert isinstance(method_info, dict)
+            if 'ids' in kw and 'model' in method_info.get('api', ()):
+                # method does not accept ids, pop them
+                args = (kw.pop('ids'), *args)
+            parameters = method_info.get('parameters')
+            assert isinstance(parameters, dict)
+            assert len(args) <= len(parameters)
+            for param_name, arg in zip(parameters, args):
+                assert param_name not in kw
+                kw[param_name] = arg
+        # set context
+        if self.context and 'context' not in kw:
+            kw['context'] = self.context
+        # execute
+        resp = self.session.post(urljoin(self.__json_url, f"{model}/{method}"), json=kw)
+        if 400 <= resp.status_code < 600:
+            try:
+                reply = resp.json()
+                raise OdooServerError(reply)
+            except requests.JSONDecodeError:
+                pass  # just let next line handle it
+        resp.raise_for_status()
+        return resp.json()
+
+    def version(self) -> dict:
+        """Get the version information from the server"""
+        if self._version:
+            return self._version
+        resp = self.session.get(urljoin(self.__json_url, '/web/version'))
+        resp.raise_for_status()
+        self._version = resp.json()
+        return self._version
+
+    @property
+    def protocol(self):
+        return "json/2"
+
+    def is_connected(self) -> bool:
+        """Check if the authentication is done"""
+        return True
+
+    @property
+    def username(self) -> str:
+        return self.user.get('login', '')
+
+    @property
+    def user(self) -> dict:
+        if not self._uid:
+            keys = self.get_model("res.users.apikeys")._search_read([], ["user_id"], limit=1)
+            if not keys:
+                raise OdooServerError("Cannot find the users's name, no keys are found")
+            self._uid = keys[0]["user_id"]
+        return super().user
+
+
 class OdooModel:
     """Odoo model (object) RPC functions"""
 
@@ -298,7 +388,7 @@ class OdooModel:
         """
         self.odoo = odoo
         self.model = model
-        self._field_info = None
+        self._info: Optional[dict] = None
 
     def __getattr__(self, name: str):
         """By default, return function bound to execute(name, ...)"""
@@ -310,7 +400,7 @@ class OdooModel:
 
     def execute(self, method: str, *args, **kw):
         """Execute an rpc method with arguments"""
-        logging.getLogger(__name__).debug("Execute %s on %s", method, self.model)
+        _logger.debug("Execute %s on %s", method, self.model)
         return self.odoo._execute_kw(
             self.model,
             method,
@@ -321,20 +411,38 @@ class OdooModel:
     def __repr__(self) -> str:
         return repr(self.odoo) + "/" + self.model
 
+    def _fetch_documentation(self) -> dict:
+        """Get the documentation of the model"""
+        if self.odoo.protocol != 'json/2':
+            raise OdooServerError("Can fetch documentation only for json/2")
+        if self._info and self._info.get('methods'):
+            return self._info
+        resp = self.odoo.session.get(urljoin(self.odoo.url, f'/doc-bearer/{self.model}.json'))
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise OdooServerError("Failed to fetch a valid documentation for json/2")
+        self._info = data
+        return data
+
     def fields(self, extended=False) -> dict[str, dict]:
         """Return the fields of the model"""
-        if not self._field_info or (extended and not self._field_info['id'].get('name')):
+        info = self._info
+        field_info = info.get('fields') if info else None
+
+        if not field_info or (extended and not field_info.get('id', {}).get('name')):
             attributes = (
                 None
                 if extended
                 else ['string', 'type', 'readonly', 'required', 'store', 'relation']
             )
-            self._field_info = self.execute(
+            field_info = self.execute(
                 'fields_get',
                 allfields=[],
                 attributes=attributes,
             )
-        return self._field_info  # type: ignore
+            self._info = {'fields': field_info}
+        return field_info  # type: ignore
 
     def __prepare_dict_fields(self, fields: Union[list[str], dict[str, dict]]) -> dict[str, dict]:
         """Make sure fields is a dict representing the data to get"""
@@ -554,3 +662,27 @@ class OdooModel:
         data = self.read_group(domain, aggregates or ['id'], groupby_list, **kwargs)
         data = self.__read_dict_date(data, groupby_list)
         return self.__read_dict_recursive(data, groupby_parsed)
+
+    # Simplified version of existing functions to keep backward compatibility.
+    # The parameters may be renamed an named paramters are forced for json/2.
+
+    def read(self, ids, fields=[], **kw):
+        return self.execute('read', ids, fields=fields, **kw)
+
+    def search(self, domain, **kw):
+        return self.execute('search', domain=domain, **kw)
+
+    def search_read(self, domain, fields=[], **kw):
+        return self.execute('search_read', domain=domain, fields=fields, **kw)
+
+    def create(self, vals_list, **kw):
+        if self.odoo.protocol == 'jsonrpc':
+            # vals are not always named this way
+            return self.execute('create', vals_list, **kw)
+        return self.execute('create', vals_list=vals_list, **kw)
+
+    def write(self, ids, vals, **kw):
+        if self.odoo.protocol == 'jsonrpc':
+            # vals are not always named this way
+            return self.execute('write', ids, vals, **kw)
+        return self.execute('write', ids, vals=vals, **kw)

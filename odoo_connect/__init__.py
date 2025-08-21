@@ -5,7 +5,7 @@ from typing import Optional
 from .odoo_rpc import OdooClient, OdooModel, OdooServerError
 
 __doc__ = """Simple Odoo RPC library."""
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger('odoo_connect')
 
 
 class OdooConnectionError(OdooServerError):
@@ -18,7 +18,9 @@ def connect(
     url: str,
     database: Optional[str] = None,
     username: Optional[str] = None,
+    *,
     password: Optional[str] = None,
+    token: Optional[str] = None,
     infer_parameters: bool = True,
     check_connection: bool = True,
     context: Optional[dict] = None,
@@ -43,6 +45,7 @@ def connect(
     :param database: The database name (optional)
     :param username: The username (when set, we try to authenticate the user during the connection)
     :param password: The password
+    :param token: Token authentication for /json/2
     :param infer_paramters: Whether to infer parameters (default: True)
     :param check_connection: Try to connect (default: True)
     :param monodb: Allow for a db.monodb call to find the default database
@@ -92,11 +95,18 @@ def connect(
 
     # Create the connection
     try:
-        client = OdooClient(url=url, database=database or 'odoo')
-        if not database:
-            database = client._find_default_database(monodb=monodb)
-            check_connection = database == 'odoo'  # check if it's the default database
-            client.database = database
+        if token is None:
+            client = OdooClient(url=url, database=database or 'odoo')
+            if not database:
+                database = client._find_default_database(monodb=monodb)
+                check_connection = database == 'odoo'  # check if it's the default database
+                client.database = database
+        else:
+            from .odoo_rpc import OdooClientJson
+
+            client = OdooClientJson(url=url, database=database, token=token)
+            if username or password:
+                raise ValueError("Cannot pass both token and user/password")
         if context:
             client.context.update(context)
         if username:
