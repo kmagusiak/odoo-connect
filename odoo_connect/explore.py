@@ -205,7 +205,7 @@ class Instance:
     def name_search(self, name: str, **kw) -> "Instance":
         """Search by name"""
         # search and return only the ids
-        data = self.__model.name_search(name, **kw)
+        data = self.__model.name_search(name=name, **kw)
         return Instance(self.__model, [d[0] for d in data])
 
     def create(self, *values: dict[str, Any], format: bool = False) -> "Instance":
@@ -287,7 +287,7 @@ class Instance:
             ]
         )
 
-    def _call(self, method, *args, model_method=False, **kw):
+    def _call(self, method, /, *args, model_method=False, **kw):
         """Call a method on the model
 
         :param model_method: Whether to don't pass ids

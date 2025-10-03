@@ -45,6 +45,7 @@ def test_read_all_fields(odoo_session):
 
 def test_read_group(odoo_session):
     data = odoo_session['res.users'].read_group_dict([], [], ['create_date:month'])
-    assert data[0]['__count']
-    month = data[0]['create_date:month']
+    d0 = data[0]
+    assert d0.get('id:count') or d0.get('__count')
+    month = d0['create_date:month']
     assert re.match(r'\d{4}-\d{2}', month), 'Date is not in ISO format'
